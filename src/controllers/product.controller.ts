@@ -1,6 +1,6 @@
-import { Response } from "express";
+import type { Response } from "express";
 import { supabase } from "../config/supabase";
-import { AuthRequest } from "../middleware/auth.middleware";
+import type { AuthRequest } from "../middleware/auth.middleware";
 
 export async function getProducts(
   req: AuthRequest,

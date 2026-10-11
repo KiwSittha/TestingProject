@@ -37,7 +37,7 @@ export const LoginPage: React.FC = () => {
   return (
     <main className="w-full min-h-[calc(100vh-4rem)] flex flex-col justify-center items-center p-margin bg-background">
       <div className="w-full max-w-md bg-surface-container-lowest rounded-lg shadow-sm p-8 flex flex-col gap-6 border border-surface-variant">
-        
+
         <div className="flex flex-col items-center text-center gap-3">
           <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
             <span className="material-symbols-outlined text-3xl">storefront</span>
@@ -96,7 +96,7 @@ export const LoginPage: React.FC = () => {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="ป้อนรหัสผ่าน..."
                 required
                 className="w-full bg-surface-container-low text-on-surface placeholder-secondary px-3.5 py-2.5 pr-10 rounded-lg text-body-md font-body-md focus:bg-surface-container-lowest outline-none transition-colors border border-outline-variant/40 focus:border-primary"
               />

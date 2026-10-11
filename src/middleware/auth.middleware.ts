@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
 export interface AuthRequest extends Request {
@@ -24,12 +24,18 @@ export function authenticateToken(
   }
 
   const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({
+      code: "AUTH_INVALID_TOKEN",
+      message: "Invalid or missing token format"
+    });
+  }
 
   try {
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET!
-    ) as AuthRequest["user"];
+    ) as NonNullable<AuthRequest["user"]>;
 
     req.user = decoded;
 

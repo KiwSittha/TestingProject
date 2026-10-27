@@ -26,10 +26,35 @@ export function authenticateToken(
     throw new ApiError("AUTH_REQUIRED", "Please login first");
   }
 
+<<<<<<< HEAD
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET!) as AuthUser;
   } catch {
     throw new ApiError("AUTH_REQUIRED", "Invalid or expired token, please login again");
+=======
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({
+      code: "AUTH_INVALID_TOKEN",
+      message: "Invalid or missing token format"
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET!
+    ) as NonNullable<AuthRequest["user"]>;
+
+    req.user = decoded;
+
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      code: "AUTH_INVALID_TOKEN",
+      message: "Invalid or expired token"
+    });
+>>>>>>> 27f31714b74e899d6ab14bfa3ed130a1bd3332cf
   }
 
   next();

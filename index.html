@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EatSomeWhere - Enterprise Commerce Portal</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Open+Sans:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  
+  <style>
+    @layer base {
+      html, body { margin: 0; padding: 0; }
+      body { overscroll-behavior: none; font-family: 'Sarabun', 'Open Sans', 'Noto Sans Thai', sans-serif; }
+    }
+    ::-webkit-scrollbar { display: none; }
+  </style>
+
+  <!-- Tailwind CSS CDN with Corporate Flat System tokens -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary-container": "#fcfcfc",
+            "surface-variant": "#e1e3e4",
+            "secondary-container": "#dde3eb",
+            "tertiary-fixed": "#e2e2e2",
+            "primary-fixed": "#d8e2ff",
+            "background": "#f8f9fa",
+            "on-tertiary": "#ffffff",
+            "surface": "#f8f9fa",
+            "inverse-primary": "#adc7ff",
+            "primary-container": "#0070ea",
+            "on-primary": "#ffffff",
+            "on-tertiary-fixed": "#1a1c1c",
+            "warning": "#FFC107",
+            "surface-container-high": "#e7e8e9",
+            "on-secondary": "#ffffff",
+            "on-primary-container": "#fefcff",
+            "outline-variant": "#c1c6d7",
+            "on-error": "#ffffff",
+            "on-secondary-container": "#5f656c",
+            "on-secondary-fixed": "#161c22",
+            "on-background": "#191c1d",
+            "surface-bright": "#f8f9fa",
+            "secondary-fixed-dim": "#c1c7ce",
+            "surface-dim": "#d9dadb",
+            "surface-container": "#edeeef",
+            "tertiary": "#5a5c5c",
+            "inverse-surface": "#2e3132",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-container": "#737575",
+            "success": "#28A745",
+            "surface-container-highest": "#e1e3e4",
+            "info": "#17A2B8",
+            "surface-tint": "#005bc0",
+            "on-surface": "#191c1d",
+            "outline": "#717786",
+            "on-surface-variant": "#414754",
+            "inverse-on-surface": "#f0f1f2",
+            "secondary-fixed": "#dde3eb",
+            "on-primary-fixed-variant": "#004493",
+            "secondary": "#595f65",
+            "primary": "#0059bb",
+            "on-primary-fixed": "#001a41",
+            "primary-fixed-dim": "#adc7ff",
+            "error": "#ba1a1a",
+            "error-container": "#ffdad6",
+            "tertiary-fixed-dim": "#c6c6c7",
+            "on-error-container": "#93000a",
+            "on-secondary-fixed-variant": "#41474e",
+            "on-tertiary-fixed-variant": "#454747",
+            "danger": "#DC3545",
+            "surface-container-low": "#f3f4f5"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-sm": "0.5rem",
+            "margin-mobile": "1rem",
+            "space-md": "1rem",
+            "gutter-mobile": "1rem",
+            "space-xl": "2rem",
+            "gutter": "1.5rem",
+            "space-lg": "1.5rem",
+            "space-xs": "0.25rem",
+            "margin": "1.5rem"
+          },
+          "fontFamily": {
+            "headline-lg-mobile": ["Sarabun", "Open Sans"],
+            "label-sm": ["Sarabun", "Open Sans"],
+            "headline-md": ["Sarabun", "Open Sans"],
+            "headline-sm": ["Sarabun", "Open Sans"],
+            "display-hero": ["Sarabun", "Open Sans"],
+            "body-md": ["Sarabun", "Open Sans"],
+            "body-sm": ["Sarabun", "Open Sans"],
+            "body-lg": ["Sarabun", "Open Sans"],
+            "code-sm": ["JetBrains Mono"],
+            "code-md": ["JetBrains Mono"],
+            "headline-lg": ["Sarabun", "Open Sans"],
+            "label-md": ["Sarabun", "Open Sans"],
+            "display-hero-mobile": ["Sarabun", "Open Sans"]
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-background font-body-md text-body-md text-on-surface antialiased min-h-screen">
+  <div id="root"></div>
+  <script type="module" src="/src/client/main.tsx"></script>
+</body>
+</html>

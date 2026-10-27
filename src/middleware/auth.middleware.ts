@@ -1,69 +1,62 @@
-import { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { ApiError } from "../utils/errors";
+
+export type Role = "Customer" | "Admin";
+
+export interface AuthUser {
+  userId: string;
+  username: string;
+  role: Role;
+}
 
 export interface AuthRequest extends Request {
-  user?: {
-    userId: string;
-    username: string;
-    role: "Customer" | "Admin";
-  };
+  user?: AuthUser;
 }
 
 export function authenticateToken(
   req: AuthRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) {
   const authHeader = req.headers.authorization;
+  const [scheme, token] = authHeader?.split(" ") ?? [];
 
-  if (!authHeader) {
-    return res.status(401).json({
-      code: "AUTH_UNAUTHORIZED",
-      message: "Access token is required"
-    });
+  if (scheme !== "Bearer" || !token) {
+    throw new ApiError("AUTH_REQUIRED", "Please login first");
   }
-
-  const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET!
-    ) as AuthRequest["user"];
-
-    req.user = decoded;
-
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      code: "AUTH_INVALID_TOKEN",
-      message: "Invalid or expired token"
-    });
+    req.user = jwt.verify(token, process.env.JWT_SECRET!) as AuthUser;
+  } catch {
+    throw new ApiError("AUTH_REQUIRED", "Invalid or expired token, please login again");
   }
+
+  next();
 }
 
-export function requireRole(
-  ...allowedRoles: Array<"Customer" | "Admin">
-) {
-  return (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
+export function requireRole(...allowedRoles: Role[]) {
+  return (req: AuthRequest, _res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({
-        code: "AUTH_UNAUTHORIZED",
-        message: "Unauthorized"
-      });
+      throw new ApiError("AUTH_REQUIRED", "Please login first");
     }
 
     if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({
-        code: "AUTH_FORBIDDEN",
-        message: "You do not have permission to access this resource"
-      });
+      throw new ApiError(
+        "AUTH_FORBIDDEN",
+        "You do not have permission to access this resource"
+      );
     }
 
     next();
   };
+}
+
+// ใช้ใน controller ที่ผ่าน authenticateToken มาแล้ว
+export function currentUser(req: Request): AuthUser {
+  const user = (req as AuthRequest).user;
+  if (!user) {
+    throw new ApiError("AUTH_REQUIRED", "Please login first");
+  }
+  return user;
 }

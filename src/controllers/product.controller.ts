@@ -1,34 +1,18 @@
-import { Response } from "express";
+import type { Request, Response } from "express";
 import { supabase } from "../config/supabase";
-import { AuthRequest } from "../middleware/auth.middleware";
+import { dbCheck } from "../utils/errors";
+import type { ProductRow } from "../types/db.types";
 
-export async function getProducts(
-  req: AuthRequest,
-  res: Response
-) {
-  try {
-    const { data: products, error } = await supabase
+// OP-2 listProducts: GET /list
+export async function getProducts(_req: Request, res: Response) {
+  const products = dbCheck(
+    await supabase
       .from("products")
-      .select("*");
+      .select("*")
+      .order("id")
+      .returns<ProductRow[]>(),
+    "List products"
+  );
 
-    console.log("Products:", products);
-    console.log("Database error:", error);
-
-    if (error) {
-      return res.status(500).json({
-        message: "Failed to get products"
-      });
-    }
-
-    return res.status(200).json({
-      products
-    });
-
-  } catch (error) {
-    console.error("Get products error:", error);
-
-    return res.status(500).json({
-      message: "Internal server error"
-    });
-  }
+  res.status(200).json({ products });
 }

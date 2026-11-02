@@ -1,28 +1,25 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { User, Product, CartItem, Order, ToastMessage, ViewType } from '../types';
+import { fetchCartApi, setAuthRequiredHandler } from '../services/api';
+import type { User, Cart, Order, ToastMessage, ViewType } from '../types';
 
 interface AppContextType {
   token: string | null;
   user: User | null;
-  cartId: string;
-  cart: CartItem[];
-  orders: Order[];
+  cart: Cart | null;
+  currentOrder: Order | null;
   currentView: ViewType;
   toasts: ToastMessage[];
   setAuth: (token: string, user: User) => void;
   clearAuth: () => void;
   setCurrentView: (view: ViewType) => void;
-  addToCart: (product: Product, quantity?: number) => void;
-  updateCartQuantity: (productId: string | number, quantity: number) => void;
-  removeFromCart: (productId: string | number) => void;
+  setCurrentOrder: (order: Order | null) => void;
+  applyCart: (cart: Cart) => void;
+  refreshCart: () => Promise<void>;
   clearCart: () => void;
-  addOrder: (txnId?: string) => Order;
   addToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info', code?: string) => void;
+  showApiError: (err: any, fallback: string) => void;
   removeToast: (id: string) => void;
   cartCount: number;
-  cartSubtotal: number;
-  cartVat: number;
-  cartTotal: number;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -33,46 +30,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('authUser');
     return saved ? JSON.parse(saved) : null;
   });
-  const [cartId] = useState<string>('CRT-89241');
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('shoppingCart');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('orderHistory');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'ORD-2025-8834',
-        date: '2026-10-09',
-        itemsCount: 3,
-        total: 12500,
-        status: 'ชำระเงินสำเร็จ',
-        badgeClass: 'bg-success/10 text-success border-success/30',
-        txnId: 'TXN-88392014-X9'
-      },
-      {
-        id: 'ORD-2025-8720',
-        date: '2026-09-28',
-        itemsCount: 1,
-        total: 4500,
-        status: 'จัดส่งแล้ว',
-        badgeClass: 'bg-info/10 text-info border-info/30',
-        txnId: 'TXN-77123910-Y2'
-      }
-    ];
-  });
+  const [cart, setCart] = useState<Cart | null>(null);
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
 
   const [currentView, setCurrentViewState] = useState<ViewType>(() => (token ? 'products' : 'login'));
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   useEffect(() => {
-    localStorage.setItem('shoppingCart', JSON.stringify(cart));
-  }, [cart]);
+    refreshCart();
+  }, [token]);
 
   useEffect(() => {
-    localStorage.setItem('orderHistory', JSON.stringify(orders));
-  }, [orders]);
+    setAuthRequiredHandler(() => {
+      // Requests running in parallel can all fail with 401, only react to the first one
+      if (!localStorage.getItem('accessToken')) return;
+      clearAuth();
+      addToast('เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง', 'warning');
+    });
+    return () => setAuthRequiredHandler(null);
+  }, []);
 
   const setAuth = (newToken: string, newUser: User) => {
     setTokenState(newToken);
@@ -85,6 +61,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const clearAuth = () => {
     setTokenState(null);
     setUserState(null);
+    setCart(null);
+    setCurrentOrder(null);
     localStorage.removeItem('accessToken');
     localStorage.removeItem('authUser');
     setCurrentViewState('login');
@@ -98,68 +76,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addToCart = (product: Product, quantity = 1) => {
-    setCart(prev => {
-      const existing = prev.find(item => String(item.id) === String(product.id));
-      if (existing) {
-        return prev.map(item =>
-          String(item.id) === String(product.id)
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-      }
-      return [
-        ...prev,
-        {
-          id: product.id,
-          name: product.name || product.title || `สินค้า #${product.id}`,
-          price: Number(product.price) || 0,
-          image_url: product.image_url || product.image || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=400&q=80',
-          category: product.category || 'ทั่วไป',
-          quantity: quantity
-        }
-      ];
-    });
-  };
-
-  const updateCartQuantity = (productId: string | number, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId);
-      return;
+  const applyCart = (newCart: Cart) => {
+    setCart(newCart);
+    if (newCart.notice) {
+      addToast(newCart.notice, 'warning');
     }
-    setCart(prev =>
-      prev.map(item => (String(item.id) === String(productId) ? { ...item, quantity } : item))
-    );
   };
 
-  const removeFromCart = (productId: string | number) => {
-    setCart(prev => prev.filter(item => String(item.id) !== String(productId)));
+  const refreshCart = async () => {
+    // GET /cart is Customer only
+    if (!token || user?.role !== 'Customer') return;
+
+    try {
+      const data = await fetchCartApi(token);
+      applyCart(data.cart);
+    } catch (err: any) {
+      showApiError(err, 'ไม่สามารถโหลดตะกร้าสินค้าได้');
+    }
   };
 
   const clearCart = () => {
-    setCart([]);
+    setCart(null);
   };
 
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const cartVat = Math.round(cartSubtotal * 0.07);
-  const cartTotal = cartSubtotal === 0 ? 0 : cartSubtotal + cartVat;
-
-  const addOrder = (txnId?: string): Order => {
-    const newOrder: Order = {
-      id: `ORD-2025-${Math.floor(1000 + Math.random() * 9000)}`,
-      date: new Date().toISOString().split('T')[0] || '',
-      itemsCount: cartCount,
-      total: cartTotal,
-      status: 'ชำระเงินสำเร็จ',
-      badgeClass: 'bg-success/10 text-success border-success/30',
-      items: [...cart],
-      txnId: txnId || `TXN-${Date.now()}`
-    };
-
-    setOrders(prev => [newOrder, ...prev]);
-    return newOrder;
-  };
+  const cartCount = cart?.totalQuantity ?? 0;
 
   const addToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success', code?: string) => {
     const newToast: ToastMessage = {
@@ -175,6 +115,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 4000);
   };
 
+  const showApiError = (err: any, fallback: string) => {
+    console.error(fallback, err);
+    // AUTH_REQUIRED already sent the user back to login with its own message
+    if (err.code !== 'AUTH_REQUIRED') {
+      addToast(err.message || fallback, 'error', err.code);
+    }
+  };
+
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
@@ -184,25 +132,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         token,
         user,
-        cartId,
         cart,
-        orders,
+        currentOrder,
         currentView,
         toasts,
         setAuth,
         clearAuth,
         setCurrentView,
-        addToCart,
-        updateCartQuantity,
-        removeFromCart,
+        setCurrentOrder,
+        applyCart,
+        refreshCart,
         clearCart,
-        addOrder,
         addToast,
+        showApiError,
         removeToast,
-        cartCount,
-        cartSubtotal,
-        cartVat,
-        cartTotal
+        cartCount
       }}
     >
       {children}

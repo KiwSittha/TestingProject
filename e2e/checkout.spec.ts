@@ -16,8 +16,6 @@ import {
 
 // E2E เฉพาะ critical user journey: login → ใส่ตะกร้า → สร้างคำสั่งซื้อ → ชำระเงิน / ชำระไม่สำเร็จ / ยกเลิก
 // เลข SC และ TC ตรงกับ docs/e2e-design.md
-// เทสที่ล้มเพราะ defect ที่รู้แล้ว ใส่ test.fail() พร้อมเลข defect ไว้
-const DEF_CHECKOUT = 'DEF-08 OP-8 สร้างคำสั่งซื้อตอบ 500 เพราะ database ไม่รับค่า zone (orders_zone_check)';
 
 let api: ShopApi;
 let ordersBefore: Order[];
@@ -35,8 +33,6 @@ test.afterAll(async ({ playwright }) => {
 
 test.describe('SC-01 ซื้อสินค้าและชำระเงินสำเร็จ', () => {
   test('TC-01 ซื้อ Coffee Beans 2 ชิ้นแล้วชำระเงินสำเร็จ', async ({ page }) => {
-    test.fail(true, DEF_CHECKOUT);
-
     // 1. login
     await loginUI(page);
 
@@ -73,8 +69,6 @@ test.describe('SC-01 ซื้อสินค้าและชำระเง�
 
 test.describe('SC-02 ชำระเงินไม่สำเร็จแล้วสินค้ายังอยู่ในตะกร้า', () => {
   test('TC-02 ชำระเงินไม่สำเร็จ', async ({ page }) => {
-    test.fail(true, DEF_CHECKOUT);
-
     // 1–2. login แล้วเพิ่ม Coffee Beans 1 ชิ้น
     await loginUI(page);
     await addToCartUI(page, 'P1', 1);
@@ -82,9 +76,11 @@ test.describe('SC-02 ชำระเงินไม่สำเร็จแล�
     // 3. เปิดตะกร้า กด "ดำเนินการชำระเงิน"
     await goToCheckoutUI(page, 1);
 
-    // 4. เลือก "กรุงเทพฯ" + "ส่งแบบปกติ" แล้วกด "สร้างคำสั่งซื้อ"
-    const orderId = await createOrderUI(page, 'กรุงเทพฯ', 'ส่งแบบปกติ');
-    expect((await api.order(orderId)).status).toBe('รอชำระเงิน');
+    // 4. เลือก "ต่างจังหวัด" + "ส่งด่วน" แล้วกด "สร้างคำสั่งซื้อ"
+    const orderId = await createOrderUI(page, 'ต่างจังหวัด', 'ส่งด่วน');
+    await expect(page.getByText('฿120.00')).toBeVisible();
+    await expect(page.getByText('฿570.00')).toBeVisible();
+    expect(await api.order(orderId)).toMatchObject({ status: 'รอชำระเงิน', net_total: 570 });
 
     // 5. กด "จำลองชำระเงินไม่สำเร็จ"
     await page.getByRole('button', { name: 'จำลองชำระเงินไม่สำเร็จ' }).click();
@@ -100,8 +96,6 @@ test.describe('SC-02 ชำระเงินไม่สำเร็จแล�
 
 test.describe('SC-03 ยกเลิกคำสั่งซื้อแล้วสินค้ายังอยู่ในตะกร้า', () => {
   test('TC-03 ยกเลิกคำสั่งซื้อที่รอชำระเงิน', async ({ page }) => {
-    test.fail(true, DEF_CHECKOUT);
-
     // 1–2. login แล้วเพิ่ม Coffee Beans 1 ชิ้น
     await loginUI(page);
     await addToCartUI(page, 'P1', 1);
@@ -109,9 +103,11 @@ test.describe('SC-03 ยกเลิกคำสั่งซื้อแล้�
     // 3. เปิดตะกร้า กด "ดำเนินการชำระเงิน"
     await goToCheckoutUI(page, 1);
 
-    // 4. เลือก "กรุงเทพฯ" + "ส่งแบบปกติ" แล้วกด "สร้างคำสั่งซื้อ"
-    const orderId = await createOrderUI(page, 'กรุงเทพฯ', 'ส่งแบบปกติ');
-    expect((await api.order(orderId)).status).toBe('รอชำระเงิน');
+    // 4. เลือก "ต่างจังหวัด" + "ส่งด่วน" แล้วกด "สร้างคำสั่งซื้อ"
+    const orderId = await createOrderUI(page, 'ต่างจังหวัด', 'ส่งด่วน');
+    await expect(page.getByText('฿120.00')).toBeVisible();
+    await expect(page.getByText('฿570.00')).toBeVisible();
+    expect(await api.order(orderId)).toMatchObject({ status: 'รอชำระเงิน', net_total: 570 });
 
     // 5. กด "ยกเลิกคำสั่งซื้อ"
     await page.getByRole('button', { name: 'ยกเลิกคำสั่งซื้อ' }).click();

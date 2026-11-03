@@ -64,19 +64,9 @@ export function addToCartApi(token: string, productId: string, quantity: number 
   return request('/cart/items', { method: 'POST', token, body: { productId, quantity } }, 'Failed to add item to cart', 'CART_ERROR');
 }
 
-export async function addToCartApi(token: string, cartId: string, productId: string | number, quantity: number = 1): Promise<{ message: string; cartItem: any }> {
-  const response = await fetch('/cart/items', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      cart_id: cartId,
-      productId: String(productId),
-      quantity: quantity,
-    }),
-  });
+export function updateCartItemApi(token: string, productId: string, quantity: number): Promise<{ message: string; cart: Cart }> {
+  return request(`/cart/items/${encodeURIComponent(productId)}`, { method: 'PATCH', token, body: { quantity } }, 'Failed to update cart item', 'CART_ERROR');
+}
 
 export function removeCartItemApi(token: string, productId: string): Promise<{ message: string; cart: Cart }> {
   return request(`/cart/items/${encodeURIComponent(productId)}`, { method: 'DELETE', token }, 'Failed to remove cart item', 'CART_ERROR');

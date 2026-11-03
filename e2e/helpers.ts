@@ -69,10 +69,8 @@ export class ShopApi {
     return (await this.ok('GET', '/orders')).orders;
   }
 
-  // order ล่าสุดที่สร้างหลังจากเทสเริ่ม (ไม่มี = undefined)
-  async newOrder(before: Order[]): Promise<Order | undefined> {
-    const known = new Set(before.map(o => o.id));
-    return (await this.orders()).find(o => !known.has(o.id));
+  async order(orderId: string): Promise<Order> {
+    return (await this.ok('GET', `/orders/${encodeURIComponent(orderId)}`)).order;
   }
 
   async cancelPendingOrders() {
@@ -148,10 +146,26 @@ export function cartRow(page: Page, productId: ProductId): Locator {
     .locator('xpath=ancestor::div[.//button[@title="ลบรายการ"]][1]');
 }
 
-// เปิดตะกร้าจากหัวเว็บ แล้วกด "ดำเนินการชำระเงิน" (OP-8 pressCheckout)
+// เปิดตะกร้าจากหัวเว็บ แล้วกด "ดำเนินการชำระเงิน" ไปหน้าเลือกการจัดส่ง (ยังไม่สร้าง order)
 export async function goToCheckoutUI(page: Page, count: number) {
   await cartButton(page, count).click();
   await expect(page.getByRole('heading', { name: 'ตะกร้าสินค้าสำหรับองค์กร' })).toBeVisible();
   await page.getByRole('button', { name: 'ดำเนินการชำระเงิน' }).click();
   await expect(page.getByRole('heading', { name: 'ตรวจสอบคำสั่งซื้อและการชำระเงิน' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'เลือกการจัดส่งเพื่อสร้างคำสั่งซื้อ' })).toBeVisible();
+}
+
+export type Zone = 'กรุงเทพฯ' | 'ต่างจังหวัด';
+export type Speed = 'ส่งแบบปกติ' | 'ส่งด่วน';
+
+// เลือกพื้นที่และความเร็วในการจัดส่ง แล้วกด "สร้างคำสั่งซื้อ" (OP-8 pressCheckout) คืนเลข order ที่หน้าเว็บแสดง
+export async function createOrderUI(page: Page, zone: Zone, speed: Speed): Promise<string> {
+  await page.getByRole('radio', { name: zone }).check();
+  await page.getByRole('radio', { name: new RegExp(`^${speed} `) }).check();
+  await page.getByRole('button', { name: 'สร้างคำสั่งซื้อ' }).click();
+
+  const heading = page.getByRole('heading', { name: /^คำสั่งซื้อ #/ });
+  await expect(heading).toBeVisible();
+  await expect(page.getByText('สร้างคำสั่งซื้อแล้ว กรุณายืนยันการชำระเงินหรือยกเลิกคำสั่งซื้อ')).toBeVisible();
+  return (await heading.textContent())!.replace('คำสั่งซื้อ #', '').trim();
 }

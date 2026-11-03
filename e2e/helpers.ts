@@ -14,15 +14,17 @@ export const PRODUCTS = {
 } as const;
 export type ProductId = keyof typeof PRODUCTS;
 
-export const COUPON = { code: 'SAVE10', percent: 10, minSpend: 1000 } as const;
+const COUPON_CODE = 'SAVE10';
 
-function password(): string {
-  const value = process.env.E2E_PASSWORD;
-  if (!value) throw new Error('E2E_PASSWORD is not set (.env or CI secret)');
+export function password(): string {
+  const value = process.env.TEST_PASSWORD;
+  if (!value) throw new Error('TEST_PASSWORD is not set (.env or CI secret)');
   return value;
 }
 
 // ---------- API: ใช้เตรียม precondition และตรวจผลฝั่ง backend ----------
+
+export type Order = { id: string; status: string; net_total: number };
 
 export class ShopApi {
   private constructor(
@@ -57,26 +59,20 @@ export class ShopApi {
     return item?.quantity ?? 0;
   }
 
-  async addToCart(productId: ProductId, quantity: number) {
-    return this.ok('POST', '/cart/items', { productId, quantity });
-  }
-
   async clearCart() {
     for (const item of (await this.cart()).items) {
       await this.ok('DELETE', `/cart/items/${item.productId}`);
     }
   }
 
-  async orders() {
+  async orders(): Promise<Order[]> {
     return (await this.ok('GET', '/orders')).orders;
   }
 
-  async checkout(zone = 'bangkok', speed = 'standard') {
-    return (await this.ok('POST', '/orders/new/payment', { zone, speed })).order;
-  }
-
-  async pay(orderId: string, result: 'success' | 'fail') {
-    return (await this.ok('POST', `/orders/${orderId}/payment`, { orderId, result })).order;
+  // order ล่าสุดที่สร้างหลังจากเทสเริ่ม (ไม่มี = undefined)
+  async newOrder(before: Order[]): Promise<Order | undefined> {
+    const known = new Set(before.map(o => o.id));
+    return (await this.orders()).find(o => !known.has(o.id));
   }
 
   async cancelPendingOrders() {
@@ -95,47 +91,54 @@ export class ShopApi {
   }
 }
 
-// เทสเขียนลง database จริง จึงต้องตั้งข้อมูลกลับเป็นค่าตั้งต้นก่อนทุกเทส
+// เทสเขียนลง database จริง จึงตั้งข้อมูลกลับเป็นค่าตั้งต้นก่อนทุกเทส:
+// สินค้าและคูปองกลับเป็นค่าเดิม ไม่มี order ค้างชำระ และตะกร้าของ cus_normal ว่าง
 export async function resetTestData(request: APIRequestContext) {
   const admin = await ShopApi.login(request, ADMIN);
   for (const [id, product] of Object.entries(PRODUCTS)) {
     await admin.call('PATCH', `/admin/products/${id}/update`, { price: product.price, stock: product.stock });
     await admin.setProductStatus(id as ProductId, 'เปิดขาย');
   }
-  await admin.call('PATCH', `/admin/coupons/${COUPON.code}/set`, { status: 1 });
+  await admin.call('PATCH', `/admin/coupons/${COUPON_CODE}/set`, { status: 1 });
 
   const customer = await ShopApi.login(request, CUSTOMER);
   await customer.cancelPendingOrders();
   await customer.clearCart();
+  expect((await customer.cart()).items).toHaveLength(0);
+  expect((await customer.orders()).filter(o => o.status === 'รอชำระเงิน')).toHaveLength(0);
   return customer;
 }
 
 // ---------- UI ----------
 
-export async function loginUI(page: Page, username = CUSTOMER, pass = password()) {
+export async function fillLogin(page: Page, username: string, pass: string) {
   await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'เข้าสู่ระบบ EatSomeWhere' })).toBeVisible();
   await page.getByLabel('ชื่อผู้ใช้').fill(username);
   await page.getByLabel('รหัสผ่าน').fill(pass);
   await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
+}
+
+export async function loginUI(page: Page) {
+  await fillLogin(page, CUSTOMER, password());
+  await expect(page.getByText('พบ 3 รายการ')).toBeVisible();
+  await expect(cartButton(page, 0)).toBeVisible();
 }
 
 export function cartButton(page: Page, count: number): Locator {
   return page.getByRole('button', { name: `ตะกร้าสินค้า ${count}`, exact: true });
 }
 
-export function productCard(page: Page, productId: ProductId): Locator {
+function productCard(page: Page, productId: ProductId): Locator {
   return page
     .getByRole('heading', { name: PRODUCTS[productId].name, exact: true })
     .locator('xpath=ancestor::div[.//button][1]');
 }
 
-export async function clickAddToCart(page: Page, productId: ProductId) {
-  await productCard(page, productId).getByRole('button').click();
-}
-
-// กดเพิ่มแล้วรอจนตัวเลขตะกร้าบนหัวเว็บเป็น expectedCount
+// กด "เพิ่มลงตะกร้า" แล้วรอ toast และตัวเลขตะกร้าบนหัวเว็บเป็น expectedCount
 export async function addToCartUI(page: Page, productId: ProductId, expectedCount: number) {
-  await clickAddToCart(page, productId);
+  await productCard(page, productId).getByRole('button', { name: 'เพิ่มลงตะกร้า' }).click();
+  await expect(page.getByText(`เพิ่ม "${PRODUCTS[productId].name}" ลงตะกร้าเรียบร้อยแล้ว!`).first()).toBeVisible();
   await expect(cartButton(page, expectedCount)).toBeVisible();
 }
 
@@ -145,21 +148,10 @@ export function cartRow(page: Page, productId: ProductId): Locator {
     .locator('xpath=ancestor::div[.//button[@title="ลบรายการ"]][1]');
 }
 
-// ---------- ส่วนที่หน้าเว็บยังไม่มี: ตั้งชื่อ locator ไว้ตาม docs/e2e-design.md ----------
-
-export async function applyCouponUI(page: Page, code: string) {
-  await expect(page.getByLabel('รหัสคูปอง')).toBeVisible();
-  await page.getByLabel('รหัสคูปอง').fill(code);
-  await page.getByRole('button', { name: 'ใช้คูปอง' }).click();
-}
-
-export async function checkoutUI(page: Page, zone: 'กรุงเทพ' | 'ต่างจังหวัด', speed: 'ปกติ' | 'ด่วน') {
-  await page.getByRole('button', { name: /ดำเนินการชำระเงิน/ }).click();
-  await expect(page.getByLabel('พื้นที่จัดส่ง')).toBeVisible();
-  await page.getByLabel('พื้นที่จัดส่ง').selectOption({ label: zone });
-  await page.getByLabel('ความเร็วในการจัดส่ง').selectOption({ label: speed });
-}
-
-export async function confirmOrderUI(page: Page) {
-  await page.getByRole('button', { name: /ยืนยันสั่งซื้อ/ }).click();
+// เปิดตะกร้าจากหัวเว็บ แล้วกด "ดำเนินการชำระเงิน" (OP-8 pressCheckout)
+export async function goToCheckoutUI(page: Page, count: number) {
+  await cartButton(page, count).click();
+  await expect(page.getByRole('heading', { name: 'ตะกร้าสินค้าสำหรับองค์กร' })).toBeVisible();
+  await page.getByRole('button', { name: 'ดำเนินการชำระเงิน' }).click();
+  await expect(page.getByRole('heading', { name: 'ตรวจสอบคำสั่งซื้อและการชำระเงิน' })).toBeVisible();
 }

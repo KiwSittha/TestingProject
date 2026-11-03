@@ -15,7 +15,7 @@ delete process.env.GIO_MODULE_DIR;
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  testDir: './tests',
+  testDir: './e2e',
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -36,7 +36,8 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
 
-  /* Configure projects for major browsers */
+  /* E2E covers critical user journeys only; API and unit tests live outside Playwright */
+  /* Every test logs in as cus_normal (password from TEST_PASSWORD) and writes to the same database */
   projects: [
     {
       name: 'chromium',

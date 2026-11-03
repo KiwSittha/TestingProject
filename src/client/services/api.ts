@@ -55,7 +55,7 @@ export async function addToCartApi(token: string, cartId: string, productId: str
     },
     body: JSON.stringify({
       cart_id: cartId,
-      product_id: productId,
+      productId: String(productId),
       quantity: quantity,
     }),
   });

@@ -92,7 +92,7 @@ function newOrderId(): string {
 
 // OP-8 pressCheckout: POST /orders/:id/payment  body { zone, speed }
 // สร้างคำสั่งซื้อจากตะกร้า (:id ใน path ยังไม่มี ใช้ค่าอะไรก็ได้ เช่น "new")
-async function checkout(req: Request, res: Response) {
+export async function checkout(req: Request, res: Response) {
   const user = currentUser(req);
   const body = getBody(req);
   const zone = requireString(body, "zone");
@@ -193,7 +193,7 @@ async function checkout(req: Request, res: Response) {
 
 // OP-10 paySuccess / OP-11 payFail: POST /orders/:id/payment
 // body { orderId, result: "success" | "fail" }
-async function pay(req: Request, res: Response) {
+export async function pay(req: Request, res: Response) {
   const user = currentUser(req);
   const orderId = getParam(req, "id");
   const body = getBody(req);
@@ -276,7 +276,7 @@ async function pay(req: Request, res: Response) {
 }
 
 // POST /orders/:id/payment ใช้ร่วมกันระหว่าง OP-8, OP-10, OP-11
-export async function orderPayment(req: Request, res: Response) {
+async function orderPayment(req: Request, res: Response) {
   if (getBody(req).result !== undefined) {
     return pay(req, res);
   }

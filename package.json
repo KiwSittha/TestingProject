@@ -19,6 +19,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "@vitest/coverage-v8": "^5.1.0",
+    "@vitest/ui": "^5.1.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
@@ -29,7 +30,8 @@
     "dev:frontend": "vite",
     "dev": "tsx watch src/server.ts",
     "build:frontend": "vite build",
-    "test:unit": "vitest run tests/unit",
-    "test:coverage": "vitest run tests/unit --coverage"
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   }
 }

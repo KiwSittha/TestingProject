@@ -30,22 +30,54 @@ async function updateProductRow(
 // OP-15 updateProduct: PATCH /admin/products/:id/update  body { productId?, price?, stock? }
 export async function updateProduct(req: Request, res: Response) {
   const productId = getParam(req, "id");
+
+  // FR-9.1.1: check that the product exists before validating price or stock.
+  await getProduct(productId);
+
   const body = getBody(req);
   assertMatchesPath(optionalString(body, "productId"), productId, "productId");
-  const price = optionalInteger(body, "price");
-  const stock = optionalInteger(body, "stock");
 
-  if (price === undefined && stock === undefined) {
-    throw new ApiError("VALIDATION_ERROR", "Provide 'price' and/or 'stock'");
-  }
-  if (price !== undefined && price <= 0) {
-    throw new ApiError("VALIDATION_ERROR", "'price' must be greater than 0");
-  }
-  if (stock !== undefined && stock < 0) {
-    throw new ApiError("VALIDATION_ERROR", "'stock' must not be negative");
+  const invalidFields: string[] = [];
+  let price: number | undefined;
+  let stock: number | undefined;
+
+  if (body.price !== undefined) {
+    if (
+      typeof body.price !== "number" ||
+      !Number.isInteger(body.price) ||
+      body.price < 1 ||
+      body.price > 50_000
+    ) {
+      invalidFields.push("price");
+    } else {
+      price = body.price;
+    }
   }
 
-  await getProduct(productId);
+  if (body.stock !== undefined) {
+    if (
+      typeof body.stock !== "number" ||
+      !Number.isInteger(body.stock) ||
+      body.stock < 0 ||
+      body.stock > 9_999
+    ) {
+      invalidFields.push("stock");
+    } else {
+      stock = body.stock;
+    }
+  }
+
+  if (body.price === undefined && body.stock === undefined) {
+    invalidFields.push("price", "stock");
+  }
+
+  if (invalidFields.length > 0) {
+    throw new ApiError(
+      "VALIDATION_ERROR",
+      `Invalid fields: ${invalidFields.join(", ")}`,
+      { fields: invalidFields }
+    );
+  }
 
   const changes: Partial<ProductRow> = {};
   if (price !== undefined) changes.price = price;

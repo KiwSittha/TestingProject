@@ -6,6 +6,12 @@ import 'dotenv/config';
 import { defineConfig, devices } from '@playwright/test';
 
 /**
+ * Terminals inside snap-installed VS Code export the snap's GIO_MODULE_DIR,
+ * which makes WebKit fail every page.goto with "WebKit encountered an internal error".
+ */
+delete process.env.GIO_MODULE_DIR;
+
+/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({

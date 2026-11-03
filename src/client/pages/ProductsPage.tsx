@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { fetchProductsApi, addToCartApi } from '../services/api';
+import { PRODUCT_STATUS } from '../../config/business';
+import { DEFAULT_PRODUCT_IMAGE } from '../constants';
 import type { Product } from '../types';
 
 export const ProductsPage: React.FC = () => {
-  const { token, cartId, addToCart, addToast } = useApp();
+  const { token, applyCart, addToast, showApiError } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -53,15 +55,12 @@ export const ProductsPage: React.FC = () => {
 
     try {
       // Call POST /cart/items API
-      await addToCartApi(token, cartId, product.id, 1);
-      
-      // Update local React state
-      addToCart(product, 1);
+      const data = await addToCartApi(token, String(product.id), 1);
+      applyCart(data.cart);
 
       addToast(`เพิ่ม "${product.name || 'สินค้า'}" ลงตะกร้าเรียบร้อยแล้ว!`, 'success');
     } catch (err: any) {
-      console.error('Add to cart error:', err);
-      addToast(err.message || 'ไม่สามารถเพิ่มสินค้าลงตะกร้าได้', 'error', err.code);
+      showApiError(err, 'ไม่สามารถเพิ่มสินค้าลงตะกร้าได้');
     } finally {
       setAddingId(null);
     }
@@ -148,10 +147,13 @@ export const ProductsPage: React.FC = () => {
               filteredProducts.map(product => {
                 const name = product.name || product.title || `สินค้า #${product.id}`;
                 const price = Number(product.price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
-                const imgUrl = product.image_url || product.image || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=400&q=80';
+                const imgUrl = product.image_url || product.image || DEFAULT_PRODUCT_IMAGE;
                 const category = product.category || 'ทั่วไป';
                 const description = product.description || 'สินค้าคุณภาพสำหรับองค์กร พร้อมการรับประกันมาตรฐาน';
                 const isAdding = String(addingId) === String(product.id);
+                const isOffSale = product.status !== PRODUCT_STATUS.ON_SALE;
+                const stock = product.available_stock ?? 0;
+                const isUnavailable = isOffSale || stock <= 0;
 
                 return (
                   <div
@@ -165,7 +167,7 @@ export const ProductsPage: React.FC = () => {
                           alt={name}
                           className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                           onError={(e: any) => {
-                            e.target.src = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=400&q=80';
+                            e.target.src = DEFAULT_PRODUCT_IMAGE;
                           }}
                         />
                         <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded bg-surface-container-lowest/90 text-on-surface font-code-sm text-code-sm border border-outline-variant/30 shadow-sm">
@@ -188,10 +190,11 @@ export const ProductsPage: React.FC = () => {
                         <span className="font-code-sm text-code-sm text-on-surface-variant">ราคา</span>
                         <span className="font-code-md text-headline-sm text-primary font-bold">฿{price}</span>
                       </div>
+                      <span className="font-code-sm text-code-sm text-on-surface-variant">คงเหลือ {stock} ชิ้น</span>
 
                       <button
                         type="button"
-                        disabled={isAdding}
+                        disabled={isAdding || isUnavailable}
                         onClick={() => handleAddToCart(product)}
                         className="w-full bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md py-2.5 rounded-lg transition-colors font-semibold shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
                       >
@@ -200,6 +203,8 @@ export const ProductsPage: React.FC = () => {
                             <span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>
                             <span>กำลังบันทึก...</span>
                           </>
+                        ) : isUnavailable ? (
+                          <span>{isOffSale ? 'ปิดการขาย' : 'สินค้าหมด'}</span>
                         ) : (
                           <>
                             <span className="material-symbols-outlined text-lg">add_shopping_cart</span>

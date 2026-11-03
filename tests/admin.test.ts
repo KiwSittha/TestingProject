@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Request, Response } from "express";
 import { ApiError } from "../src/utils/errors";
-import { getProduct } from "../src/services/cart.service";
-import { updateProduct } from "../src/controllers/admin.controller";
-
+import { updateProduct, setProductStatus, setCouponStatus, listCoupons } from '../src/controllers/admin.controller';
+import { login } from '../src/controllers/auth.controller';
+import { addCartItem, updateCartItem, removeCartItem, applyCoupon, viewCart } from '../src/controllers/cart.controller';
+import { pay, checkout, cancelOrder, listOrders, viewOrder } from '../src/controllers/order.controller';
+import { getProducts } from '../src/controllers/product.controller';
+import { getOrCreateCart, getCartLines, getProduct } from '../src/services/cart.service'
 // จำลอง Supabase chain
 const { query } = vi.hoisted(() => {
   const query: any = {};
@@ -73,4 +76,51 @@ describe("updateProduct ตาม FR-9.1.1", () => {
       details: { fields: ["price", "stock"] },
     });
   });
+
+  it("อัปเดตราคาและ stock ได้เมื่อข้อมูลถูกต้อง", async () => {
+  const existingProduct = {
+    id: "product-1",
+    price: 300,
+    available_stock: 5,
+  };
+
+  const updatedProduct = {
+    id: "product-1",
+    price: 500,
+    available_stock: 10,
+  };
+
+  vi.mocked(getProduct).mockResolvedValue(existingProduct as any);
+
+  // จำลองผลที่ Supabase ส่งกลับหลังอัปเดต
+  query.single.mockResolvedValue({
+    data: updatedProduct,
+    error: null,
+  });
+
+  const req = {
+    params: { id: "product-1" },
+    body: { price: 500, stock: 10 },
+  } as unknown as Request;
+
+  const res = {
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn(),
+  } as unknown as Response;
+
+  await expect(updateProduct(req, res)).resolves.toBeUndefined();
+
+  expect(getProduct).toHaveBeenCalledWith("product-1");
+  expect(query.update).toHaveBeenCalledWith(
+    expect.objectContaining({
+      price: 500,
+      available_stock: 10,
+    }),
+  );
+  expect(res.status).toHaveBeenCalledWith(200);
+  expect(res.json).toHaveBeenCalledWith({
+    message: "Product updated",
+    product: updatedProduct,
+  });
+});
 });

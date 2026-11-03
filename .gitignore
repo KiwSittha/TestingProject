@@ -3,3 +3,10 @@ node_modules/
 .env.*
 !.env.example
 dist/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { cancelOrderApi, checkoutApi, fetchOrderApi, payOrderApi } from '../services/api';
-import { ORDER_STATUS, SHIPPING_FEE } from '../../config/business';
+import { ORDER_STATUS, SHIPPING_SPEEDS, SHIPPING_ZONES, shippingFeeFor } from '../../config/business';
 import { SPEED_LABELS, ZONE_LABELS } from '../constants';
 import type { Order, PaymentResult } from '../types';
 
 export const CheckoutPage: React.FC = () => {
   const {
     token,
+    user,
     cart,
     currentOrder,
     setCurrentOrder,
@@ -18,7 +19,7 @@ export const CheckoutPage: React.FC = () => {
     showApiError
   } = useApp();
   const [loading, setLoading] = useState(false);
-  const [zone, setZone] = useState('bangkok');
+  const [zone, setZone] = useState('inCity');
   const [speed, setSpeed] = useState('standard');
 
   const pendingOrder = currentOrder?.status === ORDER_STATUS.PENDING_PAYMENT ? currentOrder : null;
@@ -47,7 +48,8 @@ export const CheckoutPage: React.FC = () => {
   const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   const subtotal = pendingOrder?.subtotal ?? cart?.subtotal ?? 0;
   const discount = pendingOrder?.discount ?? cart?.discount ?? 0;
-  const shippingFee = pendingOrder?.shipping_fee ?? SHIPPING_FEE[zone]?.[speed] ?? 0;
+  const shippingFee = pendingOrder?.shipping_fee ??
+    shippingFeeFor(cart?.totalWeightGram ?? 0, zone, speed, user?.memberTier ?? 'normal') ?? 0;
   const netTotal = pendingOrder?.net_total ?? subtotal - discount + shippingFee;
 
   const handleCheckout = async () => {
@@ -102,7 +104,6 @@ export const CheckoutPage: React.FC = () => {
         setCurrentView('order-confirmation');
       } else {
         addToast('ชำระเงินไม่สำเร็จ สินค้ายังอยู่ในตะกร้า', 'error');
-        await leaveToCart();
       }
     } catch (err: any) {
       showApiError(err, 'ไม่สามารถดำเนินการชำระเงินได้');
@@ -139,7 +140,7 @@ export const CheckoutPage: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => setCurrentView('cart')}
+            onClick={() => pendingOrder ? handleCancel(pendingOrder) : setCurrentView('cart')}
             className="flex items-center gap-1 text-primary font-label-md font-semibold"
           >
             <span className="material-symbols-outlined text-lg">arrow_back</span>
@@ -183,7 +184,7 @@ export const CheckoutPage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
                   <div className="flex flex-col gap-2">
                     <span className="font-label-md text-label-md text-on-surface font-semibold">พื้นที่จัดส่ง</span>
-                    {Object.keys(SHIPPING_FEE).map(value => (
+                    {SHIPPING_ZONES.map(value => (
                       <label key={value} className="flex items-center gap-2 cursor-pointer text-body-md text-on-surface">
                         <input
                           type="radio"
@@ -199,7 +200,7 @@ export const CheckoutPage: React.FC = () => {
 
                   <div className="flex flex-col gap-2">
                     <span className="font-label-md text-label-md text-on-surface font-semibold">ความเร็วในการจัดส่ง</span>
-                    {Object.entries(SHIPPING_FEE[zone] ?? {}).map(([value, fee]) => (
+                    {SHIPPING_SPEEDS.map(value => (
                       <label key={value} className="flex items-center gap-2 cursor-pointer text-body-md text-on-surface">
                         <input
                           type="radio"
@@ -208,7 +209,7 @@ export const CheckoutPage: React.FC = () => {
                           onChange={() => setSpeed(value)}
                           className="accent-primary w-4 h-4"
                         />
-                        <span>{SPEED_LABELS[value] || value} (฿{fee})</span>
+                        <span>{SPEED_LABELS[value] || value}</span>
                       </label>
                     ))}
                   </div>

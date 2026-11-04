@@ -115,7 +115,10 @@ export function discountOf(subtotal: number, coupon: CouponRow | null): number {
 
 // ตรวจว่าสินค้า 1 รายการ ใส่ตะกร้าด้วยจำนวนนี้ได้ไหม
 export function assertLineAllowed(product: ProductRow, quantity: number) {
-  if (product.status !== PRODUCT_STATUS.ON_SALE) {
+  if (
+    product.status !== PRODUCT_STATUS.ON_SALE ||
+    product.available_stock < 1
+  ) {
     throw new ApiError(
       "PRODUCT_UNAVAILABLE",
       `Product '${product.id}' is not available for sale`
@@ -225,9 +228,20 @@ export async function buildCartSummary(
     subtotal,
     options.allowCouponBelowMinSpend
   );
-  const discount = coupon && subtotal >= coupon.min_spend
+  const profile = dbCheck(
+    await supabase
+      .from("users")
+      .select("member_tier")
+      .eq("id", cart.user_id)
+      .maybeSingle<{ member_tier: string | null }>(),
+    "Load customer membership tier"
+  );
+  const hasCouponDiscount = Boolean(coupon && subtotal >= coupon.min_spend);
+  const discount = hasCouponDiscount
     ? discountOf(subtotal, coupon)
-    : 0;
+    : !coupon && profile?.member_tier === "prime"
+      ? Math.floor((subtotal * 5) / 100)
+      : 0;
 
   const summary: CartSummary = {
     cartId: cart.id,

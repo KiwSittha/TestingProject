@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { ApiError } from "../src/utils/errors";
-import { updateProduct, setProductStatus } from '../src/controllers/admin.controller';
-import { getProduct } from '../src/services/cart.service'
+import { ApiError } from "../../src/utils/errors";
+import { updateProduct, setProductStatus } from '../../src/controllers/admin.controller';
+import { getProduct } from '../../src/services/cart.service'
 // จำลอง Supabase chain
 const { query } = vi.hoisted(() => {
   const query: any = {};
@@ -14,11 +14,11 @@ const { query } = vi.hoisted(() => {
   return { query };
 });
 
-vi.mock("../src/config/supabase", () => ({
+vi.mock("../../src/config/supabase", () => ({
   supabase: { from: vi.fn(() => query) },
 }));
 
-vi.mock("../src/services/cart.service", () => ({
+vi.mock("../../src/services/cart.service", () => ({
   getProduct: vi.fn(),
 }));
 

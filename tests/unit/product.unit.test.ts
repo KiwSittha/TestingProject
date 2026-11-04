@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../src/utils/errors";
-import { getProduct } from "../src/services/cart.service";
+import { ApiError } from "../../src/utils/errors";
+import { getProduct } from "../../src/services/cart.service";
 
 const { query } = vi.hoisted(() => {
   const query: any = {};
@@ -12,7 +12,7 @@ const { query } = vi.hoisted(() => {
   return { query };
 });
 
-vi.mock("../src/config/supabase", () => ({
+vi.mock("../../src/config/supabase", () => ({
   supabase: { from: vi.fn(() => query) },
 }));
 
@@ -22,6 +22,7 @@ describe("getProduct", () => {
     vi.clearAllMocks();
   });
 
+  // ECP: productId ที่มีสินค้าอยู่ในระบบ
   it("คืนข้อมูลสินค้าเมื่อพบสินค้า", async () => {
     const product = { id: "product-1", name: "Book" };
 
@@ -34,6 +35,7 @@ describe("getProduct", () => {
     expect(query.eq).toHaveBeenCalledWith("id", "product-1");
   });
 
+  // ECP: productId ที่ไม่มีสินค้าในระบบ
   it("โยน PRODUCT_NOT_FOUND เมื่อไม่พบสินค้า", async () => {
     query.maybeSingle.mockResolvedValue({
       data: null,
@@ -45,6 +47,7 @@ describe("getProduct", () => {
     });
   });
 
+  // Error path ของ dependency: Supabase query ล้มเหลว
   it("โยน error เมื่อ query ฐานข้อมูลผิดพลาด", async () => {
     query.maybeSingle.mockResolvedValue({
       data: null,

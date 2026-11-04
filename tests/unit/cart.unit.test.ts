@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
-import { ApiError } from "../src/utils/errors";
+import { ApiError } from "../../src/utils/errors";
 import {
   buildCartSummary,
   findCoupon,
@@ -8,32 +8,34 @@ import {
   getOrCreateCart,
   getProduct,
   setCartCoupon,
-} from "../src/services/cart.service";
+} from "../../src/services/cart.service";
 import {
   addCartItem,
   applyCoupon,
   removeCartItem,
   updateCartItem,
-} from "../src/controllers/cart.controller";
+  viewCart,
+} from "../../src/controllers/cart.controller";
 
 const { query } = vi.hoisted(() => {
   const query: any = {};
   query.upsert = vi.fn();
   query.delete = vi.fn(() => query);
+  query.update = vi.fn(() => query);
   query.eq = vi.fn(() => query);
   query.select = vi.fn();
 
   return { query };
 });
 
-vi.mock("../src/config/supabase", () => ({
+vi.mock("../../src/config/supabase", () => ({
   supabase: { from: vi.fn(() => query) },
 }));
 
 // จำลองการอ่าน/สรุปข้อมูล แต่ยังใช้ validation จริงจาก cart.service
-vi.mock("../src/services/cart.service", async (importOriginal) => {
+vi.mock("../../src/services/cart.service", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../src/services/cart.service")>();
+    await importOriginal<typeof import("../../src/services/cart.service")>();
 
   return {
     ...actual,
@@ -180,8 +182,19 @@ describe("addCartItem ตาม FR-2.1 ถึง FR-2.4 และ AC-1 ถึง
     expect(query.upsert).not.toHaveBeenCalled();
   });
 
-  // FR-2.3.1 และ BVA — เพิ่มรายการใหม่ด้วยค่าขอบเขต 1 และ 10
-  it.each([1, 10])(
+  // AC-11c / นิยามสินค้าพร้อมขาย: stock = 0 จึงเพิ่มลงตะกร้าไม่ได้
+  it("ปฏิเสธสินค้า stock หมดด้วย PRODUCT_UNAVAILABLE", async () => {
+    setup({ ...product, available_stock: 0 });
+
+    await expect(
+      addCartItem(makeRequest(1), makeResponse()),
+    ).rejects.toMatchObject({ code: "PRODUCT_UNAVAILABLE" });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.3.1 / BVA — 1, 2, 9, 10 ครบขอบเขตและค่าด้านในของช่วง 1–10
+  it.each([1, 2, 9, 10])(
     "เพิ่มสินค้าใหม่ด้วย quantity %i ตามจำนวนที่ระบุ",
     async (quantity) => {
       setup();
@@ -217,6 +230,23 @@ describe("addCartItem ตาม FR-2.1 ถึง FR-2.4 และ AC-1 ถึง
     );
   });
 
+  // AC-9: cart line ที่น้ำหนักรวมเกิน 20,000 กรัมเพิ่มได้; จำกัดน้ำหนักตอน checkout
+  it("อนุญาตให้เพิ่มสินค้าแม้น้ำหนักรวมตะกร้าเกินขีดจำกัดจัดส่ง", async () => {
+    const heavyProduct = { ...product, weight_gram: 8_000 };
+    setup(heavyProduct, []);
+
+    await addCartItem(makeRequest(3), makeResponse());
+
+    expect(query.upsert).toHaveBeenCalledWith(
+      {
+        cart_id: "cart-1",
+        product_id: "product-1",
+        quantity: 3,
+      },
+      { onConflict: "cart_id,product_id" },
+    );
+  });
+
   // FR-2.4.1 — BVA: จำนวนรวมเท่ากับ 10 ยังผ่าน
   it("ยอมรับเมื่อ quantity รวมหลังเพิ่มเท่ากับ 10", async () => {
     setup(product, [{ product, quantity: 8 }]);
@@ -225,6 +255,18 @@ describe("addCartItem ตาม FR-2.1 ถึง FR-2.4 และ AC-1 ถึง
 
     expect(query.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ quantity: 10 }),
+      { onConflict: "cart_id,product_id" },
+    );
+  });
+
+  // BVA — ตรวจค่าด้านในใกล้ขอบบนของ quantity รวม
+  it("ยอมรับเมื่อ quantity รวมหลังเพิ่มเป็น 9", async () => {
+    setup(product, [{ product, quantity: 8 }]);
+
+    await addCartItem(makeRequest(1), makeResponse());
+
+    expect(query.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 9 }),
       { onConflict: "cart_id,product_id" },
     );
   });
@@ -255,6 +297,19 @@ describe("addCartItem ตาม FR-2.1 ถึง FR-2.4 และ AC-1 ถึง
         product_id: "P2",
         quantity: 3,
       }),
+      { onConflict: "cart_id,product_id" },
+    );
+  });
+
+  // BVA — quantity รวมหนึ่งหน่วยต่ำกว่า stock ก็ผ่าน
+  it("ยอมรับเมื่อ quantity รวมต่ำกว่า stock หนึ่งหน่วย", async () => {
+    const p2 = { ...product, id: "P2", available_stock: 4 };
+    setup(p2, [{ product: p2, quantity: 2 }]);
+
+    await addCartItem(makeRequest(1, "P2"), makeResponse());
+
+    expect(query.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ product_id: "P2", quantity: 3 }),
       { onConflict: "cart_id,product_id" },
     );
   });
@@ -318,7 +373,7 @@ describe("updateCartItem ตาม FR-2.5 และ FR-2.6", () => {
           makeResponse(),
         ),
       ).rejects.toMatchObject({
-        code: "ITEM_NOT_IN_CART",
+        code: "QTY_OUT_OF_RANGE",
       });
 
       expect(query.upsert).not.toHaveBeenCalled();
@@ -370,23 +425,26 @@ describe("updateCartItem ตาม FR-2.5 และ FR-2.6", () => {
     expect(query.upsert).not.toHaveBeenCalled();
   });
 
-  // FR-2.5.6 — update ต้องแทนค่าจำนวนเดิม ไม่ใช่บวกเพิ่ม
-  it("แทน quantity เดิมด้วยค่าใหม่เมื่อผ่านการตรวจสอบ", async () => {
-    setup(product, [{ product, quantity: 2 }]);
+  // FR-2.5.6 / BVA — quantity ใหม่แทนค่าเดิม ทั้งขอบเขตและค่าด้านใน
+  it.each([1, 2, 9, 10])(
+    "แทน quantity เดิมด้วยค่าใหม่ %i",
+    async (quantity) => {
+      setup(product, [{ product, quantity: 2 }]);
 
-    const res = makeResponse();
-    await updateCartItem(makeUpdateRequest("product-1", 4), res);
+      const res = makeResponse();
+      await updateCartItem(makeUpdateRequest("product-1", quantity), res);
 
-    expect(query.upsert).toHaveBeenCalledWith(
-      {
-        cart_id: "cart-1",
-        product_id: "product-1",
-        quantity: 4,
-      },
-      { onConflict: "cart_id,product_id" },
-    );
-    expect(res.status).toHaveBeenCalledWith(200);
-  });
+      expect(query.upsert).toHaveBeenCalledWith(
+        {
+          cart_id: "cart-1",
+          product_id: "product-1",
+          quantity,
+        },
+        { onConflict: "cart_id,product_id" },
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    },
+  );
 });
 
 // ---------- removeCartItem ----------
@@ -446,6 +504,34 @@ describe("removeCartItem ตาม FR-2.7 และ FR-0.7", () => {
       message: "ตะกร้าว่าง",
       cart: emptyCart,
     });
+  });
+
+  // ECP: หลังลบแล้วยังมีรายการอื่น ต้องไม่รายงานว่าตะกร้าว่าง
+  it("ลบเฉพาะรายการที่ระบุเมื่อยังมีสินค้าอื่นในตะกร้า", async () => {
+    const p1 = { ...product, id: "P1" };
+    const p2 = { ...product, id: "P2" };
+    setup(p1, [
+      { product: p1, quantity: 1 },
+      { product: p2, quantity: 2 },
+    ]);
+    const remainingCart = { items: [{ productId: "P2", quantity: 2 }] };
+    vi.mocked(buildCartSummary).mockResolvedValue(remainingCart as any);
+    query.select.mockResolvedValue({
+      data: [{ product_id: "P1" }],
+      error: null,
+    });
+
+    const res = makeResponse();
+    await removeCartItem(makeRemoveRequest("P1"), res);
+
+    expect(query.delete).toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Item removed from cart",
+      cart: remainingCart,
+    });
+    expect(res.json).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: "ตะกร้าว่าง" }),
+    );
   });
 });
 
@@ -565,5 +651,75 @@ describe("applyCoupon ตาม FR-3.1 ถึง FR-3.3", () => {
 
     expect(setCartCoupon).toHaveBeenCalledWith("cart-1", "SAVE10");
     expect(cartWithOldCoupon.applied_coupon_code).toBe("SAVE10");
+  });
+});
+
+function makeViewCartRequest(): Request {
+  return {
+    user: {
+      userId: "user-1",
+      username: "cus_normal",
+      role: "Customer",
+    },
+  } as unknown as Request;
+}
+
+// ---------- viewCart ----------
+describe("viewCart ตาม FR-2.9 และ FR-6.4", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    query.eq
+      .mockReturnValueOnce(query)
+      .mockReturnValueOnce(Promise.resolve({ data: null, error: null }));
+  });
+
+  it("ส่ง cart summary กลับตามข้อมูลที่สร้างไว้", async () => {
+    const summary = {
+      cartId: "cart-1",
+      items: [
+        {
+          productId: "P1",
+          name: "Book",
+          price: 100,
+          quantity: 2,
+          status: "เปิดขาย",
+          availableStock: 5,
+        },
+      ],
+      subtotal: 200,
+      coupon: { code: "SAVE10", percent: 10, minSpend: 100 },
+    };
+
+    setup(product, []);
+    vi.mocked(buildCartSummary).mockResolvedValue(summary as any);
+
+    const res = makeResponse();
+    await viewCart(makeViewCartRequest(), res);
+
+    expect(res.json).toHaveBeenCalledWith({ cart: summary });
+  });
+
+  it("เมื่อกลับมาซื้อต่อ ให้เปลี่ยน stage สำเร็จเป็นตะกร้าและส่งตะกร้าว่าง", async () => {
+    const emptySummary = {
+      cartId: "cart-1",
+      items: [],
+      totalQuantity: 0,
+      subtotal: 0,
+      coupon: null,
+    };
+
+    setup(product, []);
+    vi.mocked(buildCartSummary).mockResolvedValue(emptySummary as any);
+
+    const res = makeResponse();
+    await viewCart(makeViewCartRequest(), res);
+
+    expect(query.update).toHaveBeenCalledWith({
+      current_stage: "ตะกร้า",
+      current_order_id: null,
+    });
+    expect(query.eq).toHaveBeenNthCalledWith(1, "id", "user-1");
+    expect(query.eq).toHaveBeenNthCalledWith(2, "current_stage", "สำเร็จ");
+    expect(res.json).toHaveBeenCalledWith({ cart: emptySummary });
   });
 });

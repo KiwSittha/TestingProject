@@ -4,14 +4,12 @@ import { COUPON_STATUS, QTY_MAX, QTY_MIN, USER_STAGE } from "../config/business"
 import { currentUser } from "../middleware/auth.middleware";
 import {
   assertLineAllowed,
-  assertWeightAllowed,
   buildCartSummary,
   findCoupon,
   getCartLines,
   getOrCreateCart,
   getProduct,
-  setCartCoupon,
-  withQuantity
+  setCartCoupon
 } from "../services/cart.service";
 import { ApiError, dbCheck } from "../utils/errors";
 import {
@@ -57,8 +55,6 @@ export async function addCartItem(req: Request, res: Response) {
   const newQuantity = inCart + quantity;
 
   assertLineAllowed(product, newQuantity);
-  assertWeightAllowed(withQuantity(lines, product, newQuantity));
-
   await saveCartItem(cart.id, productId, newQuantity);
 
   res.status(200).json({
@@ -75,6 +71,14 @@ export async function updateCartItem(req: Request, res: Response) {
   assertMatchesPath(optionalString(body, "productId"), productId, "productId");
   const quantity = requireInteger(body, "quantity");
 
+  if (quantity < QTY_MIN || quantity > QTY_MAX) {
+    throw new ApiError(
+      "QTY_OUT_OF_RANGE",
+      `Quantity must be between ${QTY_MIN} and ${QTY_MAX}`,
+      { productId, quantity }
+    );
+  }
+
   const cart = await getOrCreateCart(user.userId);
   const lines = await getCartLines(cart.id);
   const line = lines.find((l) => l.product.id === productId);
@@ -84,8 +88,6 @@ export async function updateCartItem(req: Request, res: Response) {
   }
 
   assertLineAllowed(line.product, quantity);
-  assertWeightAllowed(withQuantity(lines, line.product, quantity));
-
   await saveCartItem(cart.id, productId, quantity);
 
   res.status(200).json({

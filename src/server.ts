@@ -5,6 +5,8 @@ import productRoutes from "./routes/product.routes";
 import cartRoutes from "./routes/cart.routes";
 import orderRoutes from "./routes/order.routes";
 import adminRoutes from "./routes/admin.routes";
+import testRoutes from "./routes/test.routes";
+
 import { errorHandler, notFoundHandler } from "./utils/errors";
 
 const app = express();
@@ -16,6 +18,12 @@ app.use("/", productRoutes);
 app.use("/", cartRoutes);
 app.use("/", orderRoutes);
 app.use("/", adminRoutes);
+
+// endpoint สำหรับเทสเท่านั้น ไม่ลงทะเบียนบน production
+if (process.env.NODE_ENV !== "production") {
+  app.use("/", testRoutes);
+}
+
 
 app.use(notFoundHandler);
 app.use(errorHandler);

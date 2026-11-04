@@ -41,7 +41,9 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "outDir": "./dist"
+    "outDir": "./dist",
+
+    "types": ["vitest/globals"]
   },
   "include": ["src/**/*", "tests/**/*"]
 }

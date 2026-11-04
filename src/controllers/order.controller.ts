@@ -276,7 +276,7 @@ export async function pay(req: Request, res: Response) {
 }
 
 // POST /orders/:id/payment ใช้ร่วมกันระหว่าง OP-8, OP-10, OP-11
-async function orderPayment(req: Request, res: Response) {
+export async function orderPayment(req: Request, res: Response) {
   if (getBody(req).result !== undefined) {
     return pay(req, res);
   }

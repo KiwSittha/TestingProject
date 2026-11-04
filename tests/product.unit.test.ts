@@ -16,6 +16,7 @@ vi.mock("../src/config/supabase", () => ({
   supabase: { from: vi.fn(() => query) },
 }));
 
+// ---------- getProduct ----------
 describe("getProduct", () => {
   beforeEach(() => {
     vi.clearAllMocks();

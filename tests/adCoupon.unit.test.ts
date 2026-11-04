@@ -34,6 +34,7 @@ function makeResponse(): Response {
   } as unknown as Response;
 }
 
+// ---------- setCouponStatus ----------
 describe("setCouponStatus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,6 +74,7 @@ describe("setCouponStatus", () => {
   });
 });
 
+// ---------- listCoupons ----------
 describe("listCoupons", () => {
   it("ส่งรายการ coupon กลับมาเมื่อพบข้อมูล", async () => {
     const coupons = [{ code: "SAVE10" }];

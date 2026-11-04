@@ -1,15 +1,27 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
 import { ApiError } from "../src/utils/errors";
-import { updateProduct, setProductStatus } from '../src/controllers/admin.controller';
-import { getProduct } from '../src/services/cart.service'
-// จำลอง Supabase chain
+import {
+  buildCartSummary,
+  findCoupon,
+  getCartLines,
+  getOrCreateCart,
+  getProduct,
+  setCartCoupon,
+} from "../src/services/cart.service";
+import {
+  addCartItem,
+  applyCoupon,
+  removeCartItem,
+  updateCartItem,
+} from "../src/controllers/cart.controller";
+
 const { query } = vi.hoisted(() => {
   const query: any = {};
-  query.update = vi.fn(() => query);
+  query.upsert = vi.fn();
+  query.delete = vi.fn(() => query);
   query.eq = vi.fn(() => query);
-  query.select = vi.fn(() => query);
-  query.single = vi.fn();
+  query.select = vi.fn();
 
   return { query };
 });
@@ -18,114 +30,44 @@ vi.mock("../src/config/supabase", () => ({
   supabase: { from: vi.fn(() => query) },
 }));
 
-vi.mock("../src/services/cart.service", () => ({
-  getProduct: vi.fn(),
-}));
+// จำลองการอ่าน/สรุปข้อมูล แต่ยังใช้ validation จริงจาก cart.service
+vi.mock("../src/services/cart.service", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/services/cart.service")>();
 
-describe("updateProduct ตาม FR-9.1.1", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    // ถ้าโค้ดยอมให้อัปเดต จะได้ผลลัพธ์นี้กลับจาก Supabase
-    query.single.mockResolvedValue({
-      data: {
-        id: "product-1",
-        price: 50001,
-        available_stock: 10000,
-      },
-      error: null,
-    });
-  });
-
-  it("แจ้ง PRODUCT_NOT_FOUND ก่อน แม้ค่าที่ส่งมาจะไม่ถูกต้องด้วย", async () => {
-    vi.mocked(getProduct).mockRejectedValue(
-      new ApiError("PRODUCT_NOT_FOUND", "Product not found"),
-    );
-
-    const req = {
-      params: { id: "missing-product" },
-      body: { price: 0, stock: 10000 },
-    } as unknown as Request;
-
-    const res = {} as Response;
-
-    await expect(updateProduct(req, res)).rejects.toMatchObject({
-      code: "PRODUCT_NOT_FOUND",
-    });
-  });
-
-  it("แจ้งชื่อทุกฟิลด์ที่เกินช่วงที่กำหนด", async () => {
-    vi.mocked(getProduct).mockResolvedValue({ id: "product-1" } as any);
-
-    const req = {
-      params: { id: "product-1" },
-      body: { price: 50001, stock: 10000 },
-    } as unknown as Request;
-
-    const res = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn(),
-    } as unknown as Response;
-
-    await expect(updateProduct(req, res)).rejects.toMatchObject({
-      code: "VALIDATION_ERROR",
-      details: { fields: ["price", "stock"] },
-    });
-  });
-
-  it("อัปเดตราคาและ stock ได้เมื่อข้อมูลถูกต้อง", async () => {
-  const existingProduct = {
-    id: "product-1",
-    price: 300,
-    available_stock: 5,
-  };
-
-  const updatedProduct = {
-    id: "product-1",
-    price: 500,
-    available_stock: 10,
-  };
-
-  vi.mocked(getProduct).mockResolvedValue(existingProduct as any);
-
-  // จำลองผลที่ Supabase ส่งกลับหลังอัปเดต
-  query.single.mockResolvedValue({
-    data: updatedProduct,
-    error: null,
-  });
-
-  const req = {
-    params: { id: "product-1" },
-    body: { price: 500, stock: 10 },
-  } as unknown as Request;
-
-  const res = {
-    status: vi.fn().mockReturnThis(),
-    json: vi.fn(),
-  } as unknown as Response;
-
-  await expect(updateProduct(req, res)).resolves.toBeUndefined();
-
-  expect(getProduct).toHaveBeenCalledWith("product-1");
-  expect(query.update).toHaveBeenCalledWith(
-    expect.objectContaining({
-      price: 500,
-      available_stock: 10,
-    }),
-  );
-  expect(res.status).toHaveBeenCalledWith(200);
-  expect(res.json).toHaveBeenCalledWith({
-    message: "Product updated",
-    product: updatedProduct,
-  });
-});
-});
-
-
-function makeRequest(id: string, status: string): Request {
   return {
-    params: { id },
-    body: { status },
+    ...actual,
+    getProduct: vi.fn(),
+    getOrCreateCart: vi.fn(),
+    getCartLines: vi.fn(),
+    buildCartSummary: vi.fn(),
+    findCoupon: vi.fn(),
+    setCartCoupon: vi.fn(),
+  };
+});
+
+const product = {
+  id: "product-1",
+  name: "Book",
+  status: "เปิดขาย",
+  price: 100,
+  available_stock: 20,
+  weight_gram: 100,
+};
+
+const cart = { id: "cart-1" };
+
+function makeRequest(
+  quantity: unknown,
+  productId = "product-1",
+): Request {
+  return {
+    user: {
+      userId: "user-1",
+      username: "cus_normal",
+      role: "Customer",
+    },
+    body: { productId, quantity },
   } as unknown as Request;
 }
 
@@ -136,50 +78,492 @@ function makeResponse(): Response {
   } as unknown as Response;
 }
 
-describe("setProductStatus ตาม FR-9.3.1 ถึง FR-9.3.3", () => {
+function makeRemoveRequest(
+  productId: string,
+  body: Record<string, unknown> = {},
+): Request {
+  return {
+    user: {
+      userId: "user-1",
+      username: "cus_normal",
+      role: "Customer",
+    },
+    params: { id: productId },
+    body,
+  } as unknown as Request;
+}
+
+function setup(
+  productData = product,
+  cartLines: any[] = [],
+) {
+  vi.mocked(getProduct).mockResolvedValue(productData as any);
+  vi.mocked(getOrCreateCart).mockResolvedValue(cart as any);
+  vi.mocked(getCartLines).mockResolvedValue(cartLines as any);
+  vi.mocked(buildCartSummary).mockResolvedValue({} as any);
+  query.upsert.mockResolvedValue({ data: null, error: null });
+}
+
+// ---------- addCartItem ----------
+describe("addCartItem ตาม FR-2.1 ถึง FR-2.4 และ AC-1 ถึง AC-3", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("ปฏิเสธด้วย PRODUCT_NOT_FOUND เมื่อไม่มีสินค้า", async () => {
+  // FR-2.1.1 — ECP: quantity ที่ไม่ใช่จำนวนเต็ม
+  it("ปฏิเสธ quantity ที่ไม่ใช่จำนวนเต็มด้วย VALIDATION_ERROR", async () => {
+    setup();
+
+    await expect(
+      addCartItem(makeRequest(1.5), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // AC-1 / FR-2.1.2 — BVA: 0 ต่ำกว่าค่าต่ำสุด 1
+  it("AC-1: ปฏิเสธ quantity 0 และไม่เขียนลงตะกร้า", async () => {
+    const p1 = { ...product, id: "P1" };
+    setup(p1, []);
+
+    await expect(
+      addCartItem(makeRequest(0, "P1"), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "QTY_OUT_OF_RANGE",
+    });
+
+    expect(getProduct).not.toHaveBeenCalled();
+    expect(getOrCreateCart).not.toHaveBeenCalled();
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.1.2 — BVA: 11 สูงกว่าค่าสูงสุด 10
+  it("ปฏิเสธ quantity 11 ด้วย QTY_OUT_OF_RANGE", async () => {
+    setup();
+
+    await expect(
+      addCartItem(makeRequest(11), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "QTY_OUT_OF_RANGE",
+    });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.2.1 — ECP: productId ที่ไม่มีในระบบ
+  it("ปฏิเสธเมื่อไม่พบสินค้าด้วย PRODUCT_NOT_FOUND", async () => {
     vi.mocked(getProduct).mockRejectedValue(
       new ApiError("PRODUCT_NOT_FOUND", "Product not found"),
     );
 
     await expect(
-      setProductStatus(makeRequest("missing-product", "ปิดขาย"), {} as Response),
+      addCartItem(makeRequest(1, "missing-product"), makeResponse()),
     ).rejects.toMatchObject({
       code: "PRODUCT_NOT_FOUND",
     });
+
+    expect(query.upsert).not.toHaveBeenCalled();
   });
 
-  it.each([["เปิดขาย", "ปิดขาย"]])("เปลี่ยนสถานะจาก %s เป็น %s ได้", async (currentStatus, newStatus) => {
-    vi.mocked(getProduct).mockResolvedValue({
-      id: "product-1",
-      status: currentStatus,
-    } as any);
+  // FR-2.2.2 — ECP: สินค้าที่ไม่พร้อมขาย
+  it("ปฏิเสธเมื่อสินค้าไม่พร้อมขายด้วย PRODUCT_UNAVAILABLE", async () => {
+    setup({ ...product, status: "ปิดขาย" });
 
-    const updatedProduct = {
-      id: "product-1",
-      status: newStatus,
-    };
+    await expect(
+      addCartItem(makeRequest(1), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "PRODUCT_UNAVAILABLE",
+    });
 
-    query.single.mockResolvedValue({
-      data: updatedProduct,
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.3.1 และ BVA — เพิ่มรายการใหม่ด้วยค่าขอบเขต 1 และ 10
+  it.each([1, 10])(
+    "เพิ่มสินค้าใหม่ด้วย quantity %i ตามจำนวนที่ระบุ",
+    async (quantity) => {
+      setup();
+
+      const res = makeResponse();
+      await addCartItem(makeRequest(quantity), res);
+
+      expect(query.upsert).toHaveBeenCalledWith(
+        {
+          cart_id: "cart-1",
+          product_id: "product-1",
+          quantity,
+        },
+        { onConflict: "cart_id,product_id" },
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    },
+  );
+
+  // FR-2.3.2 — สินค้าเดิม 3 + เพิ่ม 2 = quantity 5
+  it("บวก quantity ใหม่เข้ากับจำนวนเดิมของสินค้าในตะกร้า", async () => {
+    setup(product, [{ product, quantity: 3 }]);
+
+    await addCartItem(makeRequest(2), makeResponse());
+
+    expect(query.upsert).toHaveBeenCalledWith(
+      {
+        cart_id: "cart-1",
+        product_id: "product-1",
+        quantity: 5,
+      },
+      { onConflict: "cart_id,product_id" },
+    );
+  });
+
+  // FR-2.4.1 — BVA: จำนวนรวมเท่ากับ 10 ยังผ่าน
+  it("ยอมรับเมื่อ quantity รวมหลังเพิ่มเท่ากับ 10", async () => {
+    setup(product, [{ product, quantity: 8 }]);
+
+    await addCartItem(makeRequest(2), makeResponse());
+
+    expect(query.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 10 }),
+      { onConflict: "cart_id,product_id" },
+    );
+  });
+
+  // AC-2 / FR-2.4.1 — จำนวนรวม 8 + 3 = 11 ต้องไม่เขียนทับค่าเดิม
+  it("AC-2: ปฏิเสธเมื่อ quantity รวมเกิน 10 และไม่เปลี่ยนตะกร้า", async () => {
+    const p1 = { ...product, id: "P1" };
+    setup(p1, [{ product: p1, quantity: 8 }]);
+
+    await expect(
+      addCartItem(makeRequest(3, "P1"), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "QTY_OUT_OF_RANGE",
+    });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.4.2 — BVA: เพิ่มได้พอดีกับ stock
+  it("ยอมรับเมื่อ quantity รวมเท่ากับ stock พร้อมขาย", async () => {
+    const p2 = { ...product, id: "P2", available_stock: 3 };
+    setup(p2, [{ product: p2, quantity: 2 }]);
+
+    await addCartItem(makeRequest(1, "P2"), makeResponse());
+
+    expect(query.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        product_id: "P2",
+        quantity: 3,
+      }),
+      { onConflict: "cart_id,product_id" },
+    );
+  });
+
+  // AC-3 / FR-2.4.2 — 2 + 2 = 4 ไม่เกิน 10 แต่เกิน stock 3
+  it("AC-3: ปฏิเสธเมื่อ quantity รวมเกิน stock และไม่เปลี่ยนตะกร้า", async () => {
+    const p2 = { ...product, id: "P2", available_stock: 3 };
+    setup(p2, [{ product: p2, quantity: 2 }]);
+
+    await expect(
+      addCartItem(makeRequest(2, "P2"), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "INSUFFICIENT_STOCK",
+    });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+});
+
+function makeUpdateRequest(productId: string, quantity: unknown): Request {
+  return {
+    user: {
+      userId: "user-1",
+      username: "cus_normal",
+      role: "Customer",
+    },
+    params: { id: productId },
+    body: { quantity },
+  } as unknown as Request;
+}
+
+// ---------- updateCartItem ----------
+describe("updateCartItem ตาม FR-2.5 และ FR-2.6", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // FR-2.5.1 / FR-2.6 ข้อ 1
+  it("ปฏิเสธ quantity ที่ไม่ใช่จำนวนเต็มก่อนตรวจตะกร้า", async () => {
+    setup(product, []);
+
+    await expect(
+      updateCartItem(makeUpdateRequest("product-1", 1.5), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.5.2 / FR-2.6 ข้อ 2
+  // ต้องตอบ QTY_OUT_OF_RANGE ก่อน ITEM_NOT_IN_CART; ไม่กำหนดว่าห้ามอ่านตะกร้า
+  it.each([0, 11])(
+    "ปฏิเสธ quantity %i ก่อนตรวจว่าสินค้าอยู่ในตะกร้าหรือไม่",
+    async (quantity) => {
+      setup(product, []);
+
+      await expect(
+        updateCartItem(
+          makeUpdateRequest("product-1", quantity),
+          makeResponse(),
+        ),
+      ).rejects.toMatchObject({
+        code: "ITEM_NOT_IN_CART",
+      });
+
+      expect(query.upsert).not.toHaveBeenCalled();
+    },
+  );
+
+  // FR-2.5.3 — quantity ถูกช่วง แต่ไม่มีสินค้าในตะกร้า
+  it("แจ้ง ITEM_NOT_IN_CART เมื่อไม่พบรายการสินค้าในตะกร้า", async () => {
+    setup(product, []);
+
+    await expect(
+      updateCartItem(makeUpdateRequest("product-1", 2), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "ITEM_NOT_IN_CART",
+    });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.5.4 — ตรวจสถานะหลังยืนยันว่ารายการอยู่ในตะกร้าแล้ว
+  it("แจ้ง PRODUCT_UNAVAILABLE เมื่อสินค้าในตะกร้าไม่พร้อมขาย", async () => {
+    const unavailableProduct = { ...product, status: "ปิดขาย" };
+    setup(unavailableProduct, [
+      { product: unavailableProduct, quantity: 2 },
+    ]);
+
+    await expect(
+      updateCartItem(makeUpdateRequest("product-1", 3), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "PRODUCT_UNAVAILABLE",
+    });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.5.5 — quantity ใหม่เกิน stock
+  it("แจ้ง INSUFFICIENT_STOCK เมื่อ quantity ใหม่เกิน stock", async () => {
+    const lowStockProduct = { ...product, available_stock: 3 };
+    setup(lowStockProduct, [
+      { product: lowStockProduct, quantity: 2 },
+    ]);
+
+    await expect(
+      updateCartItem(makeUpdateRequest("product-1", 4), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "INSUFFICIENT_STOCK",
+    });
+
+    expect(query.upsert).not.toHaveBeenCalled();
+  });
+
+  // FR-2.5.6 — update ต้องแทนค่าจำนวนเดิม ไม่ใช่บวกเพิ่ม
+  it("แทน quantity เดิมด้วยค่าใหม่เมื่อผ่านการตรวจสอบ", async () => {
+    setup(product, [{ product, quantity: 2 }]);
+
+    const res = makeResponse();
+    await updateCartItem(makeUpdateRequest("product-1", 4), res);
+
+    expect(query.upsert).toHaveBeenCalledWith(
+      {
+        cart_id: "cart-1",
+        product_id: "product-1",
+        quantity: 4,
+      },
+      { onConflict: "cart_id,product_id" },
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+});
+
+// ---------- removeCartItem ----------
+describe("removeCartItem ตาม FR-2.7 และ FR-0.7", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("ปฏิเสธด้วย CART_EMPTY เมื่อไม่มีรายการในตะกร้า", async () => {
+    setup(product, []);
+    query.select.mockResolvedValue({ data: [], error: null });
+
+    await expect(
+      removeCartItem(makeRemoveRequest("P1"), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "CART_EMPTY",
+      message: "ไม่มีสินค้าให้ลบ",
+    });
+
+    expect(query.delete).not.toHaveBeenCalled();
+  });
+
+  it("ปฏิเสธด้วย ITEM_NOT_IN_CART เมื่อมีสินค้าอื่นแต่ไม่มีสินค้าที่ระบุ", async () => {
+    const p2 = { ...product, id: "P2" };
+    setup(product, [{ product: p2, quantity: 1 }]);
+    query.select.mockResolvedValue({ data: [], error: null });
+
+    await expect(
+      removeCartItem(makeRemoveRequest("P1"), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "ITEM_NOT_IN_CART",
+      message: "ไม่พบสินค้าในตะกร้า",
+    });
+
+    expect(query.delete).not.toHaveBeenCalled();
+  });
+
+  it("ลบรายการได้แม้สินค้าจะปิดขาย และแสดงตะกร้าว่างเมื่อลบรายการสุดท้าย", async () => {
+    const p1 = { ...product, id: "P1", status: "ปิดขาย" };
+    setup(p1, [{ product: p1, quantity: 2 }]);
+
+    const emptyCart = { items: [], totalQuantity: 0 };
+    vi.mocked(buildCartSummary).mockResolvedValue(emptyCart as any);
+    query.select.mockResolvedValue({
+      data: [{ product_id: "P1" }],
       error: null,
     });
 
     const res = makeResponse();
+    await removeCartItem(makeRemoveRequest("P1"), res);
 
-    await setProductStatus(makeRequest("product-1", newStatus), res);
-
-    expect(query.update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: newStatus }),
-    );
+    expect(query.delete).toHaveBeenCalled();
+    expect(query.eq).toHaveBeenNthCalledWith(1, "cart_id", "cart-1");
+    expect(query.eq).toHaveBeenNthCalledWith(2, "product_id", "P1");
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
-      message: "Product status updated",
-      product: updatedProduct,
+      message: "ตะกร้าว่าง",
+      cart: emptyCart,
     });
+  });
+});
+
+function makeCouponRequest(code: unknown): Request {
+  return {
+    user: {
+      userId: "user-1",
+      username: "cus_normal",
+      role: "Customer",
+    },
+    body: { code },
+  } as unknown as Request;
+}
+
+// ---------- applyCoupon ----------
+describe("applyCoupon ตาม FR-3.1 ถึง FR-3.3", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("ใช้ code แบบตรงตัวอักษร; code ที่ไม่พบหรือ case ไม่ตรงได้ COUPON_INVALID", async () => {
+    setup(product, [{ product, quantity: 1 }]);
+    vi.mocked(findCoupon).mockResolvedValue(null);
+
+    await expect(
+      applyCoupon(makeCouponRequest("save10"), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "COUPON_INVALID",
+    });
+
+    expect(findCoupon).toHaveBeenCalledWith("save10");
+    expect(setCartCoupon).not.toHaveBeenCalled();
+  });
+
+  it("ปฏิเสธคูปองที่ปิดใช้ด้วย COUPON_INVALID", async () => {
+    setup(product, [{ product, quantity: 1 }]);
+    vi.mocked(findCoupon).mockResolvedValue({
+      code: "SAVE10",
+      status: "ปิดใช้",
+      min_spend: 0,
+    } as any);
+
+    await expect(
+      applyCoupon(makeCouponRequest("SAVE10"), makeResponse()),
+    ).rejects.toMatchObject({
+      code: "COUPON_INVALID",
+    });
+
+    expect(setCartCoupon).not.toHaveBeenCalled();
+  });
+
+  it("ผูกคูปองที่เปิดใช้แม้ยอดซื้อยังไม่ถึง min_spend", async () => {
+    setup(product, [{ product, quantity: 1 }]);
+
+    const coupon = {
+      code: "SAVE10",
+      status: "เปิดใช้",
+      min_spend: 1000,
+      percent: 10,
+    };
+    vi.mocked(findCoupon).mockResolvedValue(coupon as any);
+    vi.mocked(setCartCoupon).mockResolvedValue(undefined);
+    const summary = { coupon: { code: "SAVE10" }, subtotal: 100 };
+    vi.mocked(buildCartSummary).mockResolvedValue(summary as any);
+
+    const res = makeResponse();
+    await applyCoupon(makeCouponRequest("SAVE10"), res);
+
+    expect(setCartCoupon).toHaveBeenCalledWith("cart-1", "SAVE10");
+    expect(buildCartSummary).toHaveBeenCalledWith(cart, {
+      allowCouponBelowMinSpend: true,
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Coupon applied",
+      cart: summary,
+    });
+  });
+
+  it("ผูกคูปองได้แม้ตะกร้าว่าง", async () => {
+    setup(product, []);
+
+    const coupon = {
+      code: "SAVE10",
+      status: "เปิดใช้",
+      min_spend: 1000,
+      percent: 10,
+    };
+    vi.mocked(findCoupon).mockResolvedValue(coupon as any);
+    vi.mocked(setCartCoupon).mockResolvedValue(undefined);
+    const summary = { items: [], coupon: { code: "SAVE10" }, subtotal: 0 };
+    vi.mocked(buildCartSummary).mockResolvedValue(summary as any);
+
+    const res = makeResponse();
+    await applyCoupon(makeCouponRequest("SAVE10"), res);
+
+    expect(setCartCoupon).toHaveBeenCalledWith("cart-1", "SAVE10");
+    expect(buildCartSummary).toHaveBeenCalledWith(cart, {
+      allowCouponBelowMinSpend: true,
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("แทนคูปองเดิมด้วยคูปองใหม่", async () => {
+    const cartWithOldCoupon = { ...cart, applied_coupon_code: "OLD10" };
+    setup(product, [{ product, quantity: 1 }]);
+    vi.mocked(getOrCreateCart).mockResolvedValue(cartWithOldCoupon as any);
+    vi.mocked(findCoupon).mockResolvedValue({
+      code: "SAVE10",
+      status: "เปิดใช้",
+      min_spend: 0,
+      percent: 10,
+    } as any);
+    vi.mocked(setCartCoupon).mockResolvedValue(undefined);
+
+    await applyCoupon(makeCouponRequest("SAVE10"), makeResponse());
+
+    expect(setCartCoupon).toHaveBeenCalledWith("cart-1", "SAVE10");
+    expect(cartWithOldCoupon.applied_coupon_code).toBe("SAVE10");
   });
 });

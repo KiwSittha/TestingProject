@@ -3,7 +3,6 @@ import { supabase } from "../config/supabase";
 import { COUPON_STATUS, QTY_MAX, QTY_MIN, USER_STAGE } from "../config/business";
 import { currentUser } from "../middleware/auth.middleware";
 import {
-  COUPON_NOT_APPLICABLE_MESSAGE,
   assertLineAllowed,
   assertWeightAllowed,
   buildCartSummary,
@@ -12,7 +11,6 @@ import {
   getOrCreateCart,
   getProduct,
   setCartCoupon,
-  subtotalOf,
   withQuantity
 } from "../services/cart.service";
 import { ApiError, dbCheck } from "../utils/errors";
@@ -103,6 +101,16 @@ export async function removeCartItem(req: Request, res: Response) {
   assertMatchesPath(optionalString(getBody(req), "productId"), productId, "productId");
 
   const cart = await getOrCreateCart(user.userId);
+  const lines = await getCartLines(cart.id);
+
+  if (lines.length === 0) {
+    throw new ApiError("CART_EMPTY", "ไม่มีสินค้าให้ลบ");
+  }
+
+  if (!lines.some((line) => line.product.id === productId)) {
+    throw new ApiError("ITEM_NOT_IN_CART", "ไม่พบสินค้าในตะกร้า");
+  }
+
   const deleted = dbCheck(
     await supabase
       .from("cart_items")
@@ -114,12 +122,14 @@ export async function removeCartItem(req: Request, res: Response) {
   );
 
   if (deleted.length === 0) {
-    throw new ApiError("ITEM_NOT_IN_CART", `Product '${productId}' is not in the cart`);
+    throw new ApiError("ITEM_NOT_IN_CART", "ไม่พบสินค้าในตะกร้า");
   }
 
+  const summary = await buildCartSummary(cart);
+
   res.status(200).json({
-    message: "Item removed from cart",
-    cart: await buildCartSummary(cart)
+    message: summary.items.length === 0 ? "ตะกร้าว่าง" : "Item removed from cart",
+    cart: summary
   });
 }
 
@@ -129,30 +139,10 @@ export async function applyCoupon(req: Request, res: Response) {
   const code = requireString(getBody(req), "code");
 
   const cart = await getOrCreateCart(user.userId);
-  const lines = await getCartLines(cart.id);
-
-  if (lines.length === 0) {
-    throw new ApiError("CART_EMPTY", "Cart is empty");
-  }
-
   const coupon = await findCoupon(code);
 
-  if (!coupon) {
-    throw new ApiError("COUPON_NOT_FOUND", `Coupon '${code}' not found`);
-  }
-
-  if (coupon.status !== COUPON_STATUS.ACTIVE) {
+  if (!coupon || coupon.status !== COUPON_STATUS.ACTIVE) {
     throw new ApiError("COUPON_INVALID", `Coupon '${code}' is not available`);
-  }
-
-  const subtotal = subtotalOf(lines);
-
-  if (subtotal < coupon.min_spend) {
-    await setCartCoupon(cart.id, null);
-    throw new ApiError("COUPON_NOT_APPLICABLE", COUPON_NOT_APPLICABLE_MESSAGE, {
-      subtotal,
-      minSpend: coupon.min_spend
-    });
   }
 
   await setCartCoupon(cart.id, coupon.code);
@@ -160,7 +150,7 @@ export async function applyCoupon(req: Request, res: Response) {
 
   res.status(200).json({
     message: "Coupon applied",
-    cart: await buildCartSummary(cart)
+    cart: await buildCartSummary(cart, { allowCouponBelowMinSpend: true })
   });
 }
 

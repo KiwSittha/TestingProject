@@ -37,6 +37,7 @@ const activeUser = {
   status: "active", // เป็นข้อมูลประกอบ mock เท่านั้น ไม่ได้ทดสอบเงื่อนไขนี้
 };
 
+// ---------- login ----------
 describe("login ตาม FR-0.1", () => {
   beforeEach(() => {
     vi.clearAllMocks();

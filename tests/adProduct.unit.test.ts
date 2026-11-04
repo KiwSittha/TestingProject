@@ -22,6 +22,7 @@ vi.mock("../src/services/cart.service", () => ({
   getProduct: vi.fn(),
 }));
 
+// ---------- updateProduct ----------
 describe("updateProduct ตาม FR-9.1.1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,6 +137,7 @@ function makeResponse(): Response {
   } as unknown as Response;
 }
 
+// ---------- setProductStatus ----------
 describe("setProductStatus ตาม FR-9.3.1 ถึง FR-9.3.3", () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -192,7 +192,8 @@ export async function setCartCoupon(cartId: string, code: string | null) {
 // คืนคูปองที่ยังใช้ได้ ถ้าใช้ไม่ได้แล้ว (FR-4.3.1) จะถอดออกจากตะกร้า
 export async function resolveCartCoupon(
   cart: CartRow,
-  subtotal: number
+  subtotal: number,
+  allowBelowMinSpend = false
 ): Promise<{ coupon: CouponRow | null; removed: boolean }> {
   if (!cart.applied_coupon_code) {
     return { coupon: null, removed: false };
@@ -200,7 +201,11 @@ export async function resolveCartCoupon(
 
   const coupon = await findCoupon(cart.applied_coupon_code);
 
-  if (coupon && isCouponApplicable(coupon, subtotal)) {
+  if (
+    coupon &&
+    coupon.status === COUPON_STATUS.ACTIVE &&
+    (allowBelowMinSpend || subtotal >= coupon.min_spend)
+  ) {
     return { coupon, removed: false };
   }
 
@@ -209,11 +214,20 @@ export async function resolveCartCoupon(
   return { coupon: null, removed: true };
 }
 
-export async function buildCartSummary(cart: CartRow): Promise<CartSummary> {
+export async function buildCartSummary(
+  cart: CartRow,
+  options: { allowCouponBelowMinSpend?: boolean } = {}
+): Promise<CartSummary> {
   const lines = await getCartLines(cart.id);
   const subtotal = subtotalOf(lines);
-  const { coupon, removed } = await resolveCartCoupon(cart, subtotal);
-  const discount = discountOf(subtotal, coupon);
+  const { coupon, removed } = await resolveCartCoupon(
+    cart,
+    subtotal,
+    options.allowCouponBelowMinSpend
+  );
+  const discount = coupon && subtotal >= coupon.min_spend
+    ? discountOf(subtotal, coupon)
+    : 0;
 
   const summary: CartSummary = {
     cartId: cart.id,

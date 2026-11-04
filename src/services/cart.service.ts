@@ -115,7 +115,10 @@ export function discountOf(subtotal: number, coupon: CouponRow | null): number {
 
 // ตรวจว่าสินค้า 1 รายการ ใส่ตะกร้าด้วยจำนวนนี้ได้ไหม
 export function assertLineAllowed(product: ProductRow, quantity: number) {
-  if (product.status !== PRODUCT_STATUS.ON_SALE) {
+  if (
+    product.status !== PRODUCT_STATUS.ON_SALE ||
+    product.available_stock < 1
+  ) {
     throw new ApiError(
       "PRODUCT_UNAVAILABLE",
       `Product '${product.id}' is not available for sale`
@@ -192,7 +195,8 @@ export async function setCartCoupon(cartId: string, code: string | null) {
 // คืนคูปองที่ยังใช้ได้ ถ้าใช้ไม่ได้แล้ว (FR-4.3.1) จะถอดออกจากตะกร้า
 export async function resolveCartCoupon(
   cart: CartRow,
-  subtotal: number
+  subtotal: number,
+  allowBelowMinSpend = false
 ): Promise<{ coupon: CouponRow | null; removed: boolean }> {
   if (!cart.applied_coupon_code) {
     return { coupon: null, removed: false };
@@ -200,7 +204,11 @@ export async function resolveCartCoupon(
 
   const coupon = await findCoupon(cart.applied_coupon_code);
 
-  if (coupon && isCouponApplicable(coupon, subtotal)) {
+  if (
+    coupon &&
+    coupon.status === COUPON_STATUS.ACTIVE &&
+    (allowBelowMinSpend || subtotal >= coupon.min_spend)
+  ) {
     return { coupon, removed: false };
   }
 
@@ -209,11 +217,31 @@ export async function resolveCartCoupon(
   return { coupon: null, removed: true };
 }
 
-export async function buildCartSummary(cart: CartRow): Promise<CartSummary> {
+export async function buildCartSummary(
+  cart: CartRow,
+  options: { allowCouponBelowMinSpend?: boolean } = {}
+): Promise<CartSummary> {
   const lines = await getCartLines(cart.id);
   const subtotal = subtotalOf(lines);
-  const { coupon, removed } = await resolveCartCoupon(cart, subtotal);
-  const discount = discountOf(subtotal, coupon);
+  const { coupon, removed } = await resolveCartCoupon(
+    cart,
+    subtotal,
+    options.allowCouponBelowMinSpend
+  );
+  const profile = dbCheck(
+    await supabase
+      .from("users")
+      .select("member_tier")
+      .eq("id", cart.user_id)
+      .maybeSingle<{ member_tier: string | null }>(),
+    "Load customer membership tier"
+  );
+  const hasCouponDiscount = Boolean(coupon && subtotal >= coupon.min_spend);
+  const discount = hasCouponDiscount
+    ? discountOf(subtotal, coupon)
+    : !coupon && profile?.member_tier === "prime"
+      ? Math.floor((subtotal * 5) / 100)
+      : 0;
 
   const summary: CartSummary = {
     cartId: cart.id,

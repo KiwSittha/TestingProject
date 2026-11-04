@@ -188,7 +188,8 @@ describe("buildCartSummary (stub: cart_items, coupons, carts.update)", () => {
       .mockReturnValueOnce(
         stubQuery({ data: [cartItemRow(p1, 2), cartItemRow(p2, 3)], error: null })
       )
-      .mockReturnValueOnce(stubQuery({ data: coupon, error: null }));
+      .mockReturnValueOnce(stubQuery({ data: coupon, error: null }))
+      .mockReturnValueOnce(stubQuery({ data: { member_tier: "normal" }, error: null }));
 
     // Act
     const summary = await buildCartSummary(cart);
@@ -215,7 +216,8 @@ describe("buildCartSummary (stub: cart_items, coupons, carts.update)", () => {
     from
       .mockReturnValueOnce(stubQuery({ data: [cartItemRow(product, 2)], error: null }))
       .mockReturnValueOnce(stubQuery({ data: coupon, error: null }))
-      .mockReturnValueOnce(stubQuery(UPDATE_OK));
+      .mockReturnValueOnce(stubQuery(UPDATE_OK))
+      .mockReturnValueOnce(stubQuery({ data: { member_tier: "normal" }, error: null }));
 
     // Act
     const summary = await buildCartSummary(cart);
@@ -225,5 +227,18 @@ describe("buildCartSummary (stub: cart_items, coupons, carts.update)", () => {
     expect(summary.coupon).toBeNull();
     expect(summary.discount).toBe(0);
     expect(summary.total).toBe(200);
+  });
+
+  it("ST-12: prime customer without an applicable coupon gets a 5% discount", async () => {
+    const product = makeProduct({ id: "P001", price: 1650 });
+    const cart = makeCart();
+    from
+      .mockReturnValueOnce(stubQuery({ data: [cartItemRow(product, 1)], error: null }))
+      .mockReturnValueOnce(stubQuery({ data: { member_tier: "prime" }, error: null }));
+
+    const summary = await buildCartSummary(cart);
+
+    expect(summary.discount).toBe(82);
+    expect(summary.total).toBe(1568);
   });
 });

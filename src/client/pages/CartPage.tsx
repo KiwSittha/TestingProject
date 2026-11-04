@@ -110,7 +110,7 @@ export const CartPage: React.FC = () => {
             <div className="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
               <span className="material-symbols-outlined text-3xl">shopping_cart</span>
             </div>
-            <h2 className="font-headline-md text-headline-md font-bold text-on-surface">ตะกร้าสินค้าของคุณยังว่างอยู่</h2>
+            <h2 className="font-headline-md text-headline-md font-bold text-on-surface">ตะกร้าว่าง</h2>
             <p className="font-body-md text-on-surface-variant max-w-md">
               เลือกชมสินค้าและเพิ่มรายการลงในตะกร้าเพื่อดำเนินการจัดซื้อสำหรับองค์กร
             </p>

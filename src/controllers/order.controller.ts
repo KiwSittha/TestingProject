@@ -1,17 +1,17 @@
 import type { Request, Response } from "express";
 import { supabase } from "../config/supabase";
-import { ORDER_STATUS, SHIPPING_FEE, USER_STAGE } from "../config/business";
+import { ORDER_STATUS, PRODUCT_STATUS, USER_STAGE, shippingFeeFor } from "../config/business";
 import { currentUser } from "../middleware/auth.middleware";
 import {
   COUPON_NOT_APPLICABLE_MESSAGE,
-  assertLineAllowed,
   assertWeightAllowed,
   discountOf,
   getCartLines,
   getOrCreateCart,
   resolveCartCoupon,
   setCartCoupon,
-  subtotalOf
+  subtotalOf,
+  weightOf
 } from "../services/cart.service";
 import { ApiError, dbCheck } from "../utils/errors";
 import {
@@ -21,7 +21,7 @@ import {
   optionalString,
   requireString
 } from "../utils/validate";
-import type { OrderItemRow, OrderRow, ProductRow } from "../types/db.types";
+import type { CartRow, OrderItemRow, OrderRow, ProductRow } from "../types/db.types";
 
 async function loadOwnOrder(userId: string, orderId: string): Promise<OrderRow> {
   const order = dbCheck(
@@ -57,7 +57,7 @@ async function loadOrderItems(orderId: string): Promise<OrderItemRow[]> {
 function assertPendingPayment(order: OrderRow) {
   if (order.status !== ORDER_STATUS.PENDING_PAYMENT) {
     throw new ApiError(
-      "VALIDATION_ERROR",
+      "OPERATION_NOT_ALLOWED",
       `Order '${order.id}' is not awaiting payment (status: ${order.status})`
     );
   }
@@ -85,6 +85,48 @@ async function setUserStage(userId: string, stage: string, orderId: string | nul
   );
 }
 
+function assertCheckoutLinesAvailable(
+  lines: Array<{ product: ProductRow; quantity: number }>
+) {
+  const productIds = lines
+    .filter(({ product, quantity }) =>
+      product.status !== PRODUCT_STATUS.ON_SALE || quantity > product.available_stock
+    )
+    .map(({ product }) => product.id);
+
+  if (productIds.length > 0) {
+    throw new ApiError(
+      "ITEMS_UNAVAILABLE",
+      "มีสินค้าที่ไม่พร้อมขายหรือมีจำนวนเกินสต็อก",
+      { productIds }
+    );
+  }
+}
+
+async function restoreOrderToCart(
+  userId: string,
+  cart: CartRow,
+  items: OrderItemRow[],
+  couponCode: string | null
+) {
+  const cartRows = items.map((item) => ({
+    cart_id: cart.id,
+    product_id: item.product_id,
+    quantity: item.quantity
+  }));
+
+  if (cartRows.length > 0) {
+    dbCheck(
+      await supabase
+        .from("cart_items")
+        .upsert(cartRows, { onConflict: "cart_id,product_id" }),
+      "Restore cancelled order items to cart"
+    );
+  }
+  await setCartCoupon(cart.id, couponCode);
+  await setUserStage(userId, USER_STAGE.CART, null);
+}
+
 function newOrderId(): string {
   const random = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `ORD-${Date.now()}-${random}`;
@@ -97,54 +139,46 @@ export async function checkout(req: Request, res: Response) {
   const body = getBody(req);
   const zone = requireString(body, "zone");
   const speed = requireString(body, "speed");
-  const shippingFee = SHIPPING_FEE[zone]?.[speed];
-
-  if (shippingFee === undefined) {
+  if (shippingFeeFor(1, zone, speed, "normal") === undefined) {
     throw new ApiError("VALIDATION_ERROR", "Invalid zone or speed", {
-      allowed: Object.fromEntries(
-        Object.entries(SHIPPING_FEE).map(([z, speeds]) => [z, Object.keys(speeds)])
-      )
+      allowed: { zones: ["inCity", "upcountry", "remote"], speeds: ["standard", "express"] }
     });
-  }
-
-  const pending = dbCheck(
-    await supabase
-      .from("orders")
-      .select("id")
-      .eq("user_id", user.userId)
-      .eq("status", ORDER_STATUS.PENDING_PAYMENT)
-      .limit(1),
-    "Load pending orders"
-  );
-
-  if (pending[0]) {
-    throw new ApiError(
-      "VALIDATION_ERROR",
-      "There is already an order awaiting payment, pay or cancel it first",
-      { orderId: pending[0].id }
-    );
   }
 
   const cart = await getOrCreateCart(user.userId);
   const lines = await getCartLines(cart.id);
 
   if (lines.length === 0) {
-    throw new ApiError("CART_EMPTY", "Cart is empty");
+    throw new ApiError("CART_EMPTY", "ไม่สามารถชำระเงินได้ ตะกร้าว่าง");
   }
 
-  for (const line of lines) {
-    assertLineAllowed(line.product, line.quantity);
-  }
+  assertCheckoutLinesAvailable(lines);
   assertWeightAllowed(lines);
+
+  const userProfile = dbCheck(
+    await supabase
+      .from("users")
+      .select("member_tier")
+      .eq("id", user.userId)
+      .maybeSingle<{ member_tier: string | null }>(),
+    "Load customer membership tier"
+  );
+  const memberTier = userProfile?.member_tier ?? "normal";
+  const shippingFee = shippingFeeFor(weightOf(lines), zone, speed, memberTier);
+  if (shippingFee === undefined) {
+    throw new ApiError("VALIDATION_ERROR", "Invalid zone or speed", {
+      allowed: { zones: ["inCity", "upcountry", "remote"], speeds: ["standard", "express"] }
+    });
+  }
 
   const subtotal = subtotalOf(lines);
   const { coupon, removed } = await resolveCartCoupon(cart, subtotal);
 
-  if (removed) {
-    throw new ApiError("COUPON_NOT_APPLICABLE", COUPON_NOT_APPLICABLE_MESSAGE);
-  }
-
-  const discount = discountOf(subtotal, coupon);
+  const discount = coupon
+    ? discountOf(subtotal, coupon)
+    : memberTier === "prime"
+      ? Math.floor((subtotal * 5) / 100)
+      : 0;
 
   const order = dbCheck(
     await supabase
@@ -183,11 +217,27 @@ export async function checkout(req: Request, res: Response) {
     "Create order items"
   );
 
+  // Reserve available stock on checkout; the reservation stays until pay success
+  // or cancellation, per FR-5.3.7 and FR-5.3.10.
+  for (const { product, quantity } of lines) {
+    dbCheck(
+      await supabase
+        .from("products")
+        .update({
+          available_stock: product.available_stock - quantity,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", product.id),
+      "Reserve product stock"
+    );
+  }
+
   await setUserStage(user.userId, USER_STAGE.PAYMENT, order.id);
 
   res.status(200).json({
     message: "Order created, awaiting payment",
-    order: { ...order, items }
+    order: { ...order, items },
+    ...(removed ? { notice: COUPON_NOT_APPLICABLE_MESSAGE } : {})
   });
 }
 
@@ -208,52 +258,14 @@ export async function pay(req: Request, res: Response) {
   assertPendingPayment(order);
 
   if (result === "fail") {
-    const failed = await updateOrderStatus(order.id, ORDER_STATUS.PAYMENT_FAILED);
-    await setUserStage(user.userId, USER_STAGE.CART, null);
-
     res.status(200).json({
-      message: "Payment failed, items are still in your cart",
-      order: failed
+      message: "การชำระเงินล้มเหลว กรุณาลองใหม่",
+      order
     });
     return;
   }
 
   const items = await loadOrderItems(order.id);
-  const products = dbCheck(
-    await supabase
-      .from("products")
-      .select("*")
-      .in("id", items.map((i) => i.product_id))
-      .returns<ProductRow[]>(),
-    "Load products"
-  );
-  const productById = new Map(products.map((p) => [p.id, p]));
-
-  // เช็กสต็อกทั้งหมดก่อนค่อยตัด
-  for (const item of items) {
-    const stock = productById.get(item.product_id)?.available_stock ?? 0;
-    if (item.quantity > stock) {
-      throw new ApiError(
-        "INSUFFICIENT_STOCK",
-        `Only ${stock} item(s) of '${item.product_id}' left in stock`,
-        { productId: item.product_id, availableStock: stock }
-      );
-    }
-  }
-
-  for (const item of items) {
-    const stock = productById.get(item.product_id)!.available_stock;
-    dbCheck(
-      await supabase
-        .from("products")
-        .update({
-          available_stock: stock - item.quantity,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", item.product_id),
-      "Deduct stock"
-    );
-  }
 
   const paid = await updateOrderStatus(order.id, ORDER_STATUS.PAID);
 
@@ -262,8 +274,7 @@ export async function pay(req: Request, res: Response) {
     await supabase
       .from("cart_items")
       .delete()
-      .eq("cart_id", cart.id)
-      .in("product_id", items.map((i) => i.product_id)),
+      .eq("cart_id", cart.id),
     "Clear purchased cart items"
   );
   await setCartCoupon(cart.id, null);
@@ -289,8 +300,35 @@ export async function cancelOrder(req: Request, res: Response) {
   const order = await loadOwnOrder(user.userId, getParam(req, "id"));
   assertPendingPayment(order);
 
+  const items = await loadOrderItems(order.id);
+  const products = dbCheck(
+    await supabase
+      .from("products")
+      .select("*")
+      .in("id", items.map((item) => item.product_id))
+      .returns<ProductRow[]>(),
+    "Load products for stock restoration"
+  );
+  const productById = new Map(products.map((product) => [product.id, product]));
+
+  for (const item of items) {
+    const product = productById.get(item.product_id);
+    if (!product) continue;
+    dbCheck(
+      await supabase
+        .from("products")
+        .update({
+          available_stock: product.available_stock + item.quantity,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", item.product_id),
+      "Restore reserved product stock"
+    );
+  }
+
   const cancelled = await updateOrderStatus(order.id, ORDER_STATUS.CANCELLED);
-  await setUserStage(user.userId, USER_STAGE.CART, null);
+  const cart = await getOrCreateCart(user.userId);
+  await restoreOrderToCart(user.userId, cart, items, order.coupon_code);
 
   res.status(200).json({
     message: "Checkout cancelled",

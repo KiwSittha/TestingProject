@@ -31,12 +31,12 @@ Error ทุกตัวตอบเป็น `{ "code": "...", "message": "..."
 ## หมายเหตุการออกแบบ
 
 - **OP-8 / OP-10 / OP-11 ใช้ path เดียวกัน** แยกด้วย body: มี `result` = จ่ายเงิน, ไม่มี = checkout (`:id` ตอน checkout ใช้ `new` เพราะยังไม่มีเลข order)
-- **zone / speed** และค่าส่งอยู่ใน `src/config/business.ts` (`SHIPPING_FEE`) ตอนนี้: `bangkok` / `upcountry` × `standard` / `express`
+- **zone / speed** ใช้ `inCity` / `upcountry` / `remote` และ `standard` / `express`; ค่าส่งคำนวณตามน้ำหนักรวมและระดับสมาชิกตาม FR-4.5–4.7
 - **คูปอง (FR-4.3.1)**: ถ้ายอดต่ำกว่า `min_spend` หรือคูปองถูกปิด จะถอดคูปองออกจากตะกร้าอัตโนมัติ
-  - `PUT /cart/items` → 400 `COUPON_NOT_APPLICABLE`
-  - `GET /cart` และ cart response อื่น ๆ → 200 พร้อม `cart.notice`
-  - checkout → 400 `COUPON_NOT_APPLICABLE`
+  - การผูกคูปองไม่ตรวจยอดขั้นต่ำ
+  - `GET /cart` และ checkout ถอดคูปองที่ใช้ไม่ได้ พร้อม notice `COUPON_NOT_APPLICABLE`
 - จำนวนต่อสินค้า 1–10 (รวมของเดิมในตะกร้า), น้ำหนักรวม ≤ 20,000 กรัม
-- ตัด stock ตอน `paySuccess` เท่านั้น แล้วลบสินค้าที่ซื้อออกจากตะกร้า
+- จอง stock ตอน checkout; คงการจองไว้เมื่อชำระเงินล้มเหลว, คืน stock และรายการกลับตะกร้าเมื่อยกเลิก
+- `payFail` คงสถานะออเดอร์และ stage เดิม เพื่อให้ลองชำระเงินซ้ำได้
 - ดู order ที่ไม่มีอยู่ หรือเป็นของคนอื่น → 404 `ORDER_NOT_FOUND` เหมือนกัน
-- สถานะ order: `รอชำระเงิน` → `ชำระเงินสำเร็จ` / `ชำระเงินไม่สำเร็จ` / `ยกเลิก`
+- สถานะ order: `รอชำระเงิน` → `ชำระเงินสำเร็จ` / `ยกเลิก`

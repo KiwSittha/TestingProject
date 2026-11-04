@@ -248,7 +248,7 @@ describe("SRS-CART Automated API Testing (OP-1 ถึง OP-18)", () => {
       const res = await fetch(`${BASE_URL}/orders/new/payment`, {
         method: "POST",
         headers: customerHeaders,
-        body: JSON.stringify({ zone: "bangkok", speed: "standard" }),
+        body: JSON.stringify({ zone: "inCity", speed: "standard" }),
       });
 
       expect(res.status).toBe(200);
@@ -261,7 +261,7 @@ describe("SRS-CART Automated API Testing (OP-1 ถึง OP-18)", () => {
       const res = await fetch(`${BASE_URL}/orders/new/payment`, {
         method: "POST",
         headers: customerHeaders,
-        body: JSON.stringify({ zone: "bangkok", speed: "standard" }),
+        body: JSON.stringify({ zone: "inCity", speed: "standard" }),
       });
 
       expect(res.status).toBe(400);
@@ -287,7 +287,7 @@ describe("SRS-CART Automated API Testing (OP-1 ถึง OP-18)", () => {
       const checkoutRes = await fetch(`${BASE_URL}/orders/new/payment`, {
         method: "POST",
         headers: customerHeaders,
-        body: JSON.stringify({ zone: "bangkok", speed: "standard" }),
+        body: JSON.stringify({ zone: "inCity", speed: "standard" }),
       });
       expect(checkoutRes.status).toBe(200);
 

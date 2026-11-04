@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
-import { login } from "../src/controllers/auth.controller";
+import { login } from "../../src/controllers/auth.controller";
 
 const { query, from, compare, sign } = vi.hoisted(() => {
   const query: any = {};
@@ -16,7 +16,7 @@ const { query, from, compare, sign } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../src/config/supabase", () => ({
+vi.mock("../../src/config/supabase", () => ({
   supabase: { from },
 }));
 
@@ -37,6 +37,7 @@ const activeUser = {
   status: "active", // เป็นข้อมูลประกอบ mock เท่านั้น ไม่ได้ทดสอบเงื่อนไขนี้
 };
 
+// ---------- login ----------
 describe("login ตาม FR-0.1", () => {
   beforeEach(() => {
     vi.clearAllMocks();

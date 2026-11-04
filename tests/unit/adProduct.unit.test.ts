@@ -1,12 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Request, Response } from "express";
-import { ApiError } from "../src/utils/errors";
-import { updateProduct, setProductStatus, setCouponStatus, listCoupons } from '../src/controllers/admin.controller';
-import { login } from '../src/controllers/auth.controller';
-import { addCartItem, updateCartItem, removeCartItem, applyCoupon, viewCart } from '../src/controllers/cart.controller';
-import { pay, checkout, cancelOrder, listOrders, viewOrder } from '../src/controllers/order.controller';
-import { getProducts } from '../src/controllers/product.controller';
-import { getOrCreateCart, getCartLines, getProduct } from '../src/services/cart.service'
+import { ApiError } from "../../src/utils/errors";
+import { updateProduct, setProductStatus } from '../../src/controllers/admin.controller';
+import { getProduct } from '../../src/services/cart.service'
 // จำลอง Supabase chain
 const { query } = vi.hoisted(() => {
   const query: any = {};
@@ -18,14 +14,15 @@ const { query } = vi.hoisted(() => {
   return { query };
 });
 
-vi.mock("../src/config/supabase", () => ({
+vi.mock("../../src/config/supabase", () => ({
   supabase: { from: vi.fn(() => query) },
 }));
 
-vi.mock("../src/services/cart.service", () => ({
+vi.mock("../../src/services/cart.service", () => ({
   getProduct: vi.fn(),
 }));
 
+// ---------- updateProduct ----------
 describe("updateProduct ตาม FR-9.1.1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -123,4 +120,68 @@ describe("updateProduct ตาม FR-9.1.1", () => {
     product: updatedProduct,
   });
 });
+});
+
+
+function makeRequest(id: string, status: string): Request {
+  return {
+    params: { id },
+    body: { status },
+  } as unknown as Request;
+}
+
+function makeResponse(): Response {
+  return {
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn(),
+  } as unknown as Response;
+}
+
+// ---------- setProductStatus ----------
+describe("setProductStatus ตาม FR-9.3.1 ถึง FR-9.3.3", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("ปฏิเสธด้วย PRODUCT_NOT_FOUND เมื่อไม่มีสินค้า", async () => {
+    vi.mocked(getProduct).mockRejectedValue(
+      new ApiError("PRODUCT_NOT_FOUND", "Product not found"),
+    );
+
+    await expect(
+      setProductStatus(makeRequest("missing-product", "ปิดขาย"), {} as Response),
+    ).rejects.toMatchObject({
+      code: "PRODUCT_NOT_FOUND",
+    });
+  });
+
+  it.each([["เปิดขาย", "ปิดขาย"]])("เปลี่ยนสถานะจาก %s เป็น %s ได้", async (currentStatus, newStatus) => {
+    vi.mocked(getProduct).mockResolvedValue({
+      id: "product-1",
+      status: currentStatus,
+    } as any);
+
+    const updatedProduct = {
+      id: "product-1",
+      status: newStatus,
+    };
+
+    query.single.mockResolvedValue({
+      data: updatedProduct,
+      error: null,
+    });
+
+    const res = makeResponse();
+
+    await setProductStatus(makeRequest("product-1", newStatus), res);
+
+    expect(query.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: newStatus }),
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Product status updated",
+      product: updatedProduct,
+    });
+  });
 });

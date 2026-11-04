@@ -151,16 +151,43 @@ describe("SRS-CART Automated API Testing (OP-1 ถึง OP-18)", () => {
       expect(res.status).toBe(200);
     });
 
-    it("ปฏิเสธ 404 เมื่อลบสินค้าที่ไม่มีในตะกร้า (ITEM_NOT_IN_CART)", async () => {
+    it("ปฏิเสธ 400 เมื่อลบสินค้าขณะตะกร้าว่าง ", async () => {
+      // Setup: เคลียร์ P1 ให้ตะกร้าว่างจริง (ไม่สนผลถ้าไม่มีอยู่แล้ว)
+      await fetch(`${BASE_URL}/cart/items/P1`, {
+        method: "DELETE",
+        headers: customerHeaders,
+        body: JSON.stringify({ productId: "P1" }),
+      });
+
       const res = await fetch(`${BASE_URL}/cart/items/P999`, {
         method: "DELETE",
         headers: customerHeaders,
         body: JSON.stringify({ productId: "P999" }),
       });
 
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe("CART_EMPTY");
+    });
+
+    it("ปฏิเสธ 404 เมื่อลบสินค้าที่ไม่มีในตะกร้า ขณะตะกร้ามีรายการอื่น ", async () => {
+      // Setup: ต้องมี P1 ในตะกร้า ไม่เช่นนั้นจะเป็น CART_EMPTY
+      await fetch(`${BASE_URL}/cart/items`, {
+        method: "POST",
+        headers: customerHeaders,
+        body: JSON.stringify({ productId: "P1", quantity: 1 }),
+      });
+
+      const res = await fetch(`${BASE_URL}/cart/items/P2`, {
+        method: "DELETE",
+        headers: customerHeaders,
+        body: JSON.stringify({ productId: "P2" }),
+      });
+
       expect(res.status).toBe(404);
+      expect((await res.json()).code).toBe("ITEM_NOT_IN_CART");
     });
   });
+
 
   // --------------------------------------------------------------------------
   // OP-6: applyCoupon(code)
@@ -204,16 +231,16 @@ describe("SRS-CART Automated API Testing (OP-1 ถึง OP-18)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("ปฏิเสธเมื่อคูปองไม่มีในระบบ (404 COUPON_NOT_FOUND)", async () => {
+  it("ปฏิเสธเมื่อคูปองไม่มีในระบบ (400 COUPON_INVALID)", async () => {
     const res = await fetch(`${BASE_URL}/cart/items`, {
       method: "PUT",
       headers,
       body: JSON.stringify({ code: "SAVE0" }),
     });
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.code).toBe("COUPON_NOT_FOUND");
+    expect(body.code).toBe("COUPON_INVALID");
   });
 });
 

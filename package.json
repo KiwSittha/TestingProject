@@ -32,6 +32,8 @@
     "build:frontend": "vite build",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+
+    "test:api": "vitest run tests/api"
   }
 }

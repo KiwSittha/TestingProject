@@ -31,8 +31,8 @@ describe("updateProduct ตาม FR-9.1.1", () => {
     query.single.mockResolvedValue({
       data: {
         id: "product-1",
-        price: 50001,
-        available_stock: 10000,
+        price: 1,
+        available_stock: 0,
       },
       error: null,
     });
@@ -45,7 +45,7 @@ describe("updateProduct ตาม FR-9.1.1", () => {
 
     const req = {
       params: { id: "missing-product" },
-      body: { price: 0, stock: 10000 },
+      body: { price: 0, stock: 5000 },
     } as unknown as Request;
 
     const res = {} as Response;
@@ -98,7 +98,7 @@ describe("updateProduct ตาม FR-9.1.1", () => {
 
     const req = {
       params: { id: "product-1" },
-      body: { price: 20000, stock: 10000 },
+      body: { price: 50001, stock: 10000 },
     } as unknown as Request;
 
     const res = {

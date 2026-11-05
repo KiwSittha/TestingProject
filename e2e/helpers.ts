@@ -155,13 +155,13 @@ export async function goToCheckoutUI(page: Page, count: number) {
   await expect(page.getByRole('heading', { name: 'เลือกการจัดส่งเพื่อสร้างคำสั่งซื้อ' })).toBeVisible();
 }
 
-export type Zone = 'กรุงเทพฯ' | 'ต่างจังหวัด';
+export type Zone = 'ในเมือง' | 'ต่างจังหวัด';
 export type Speed = 'ส่งแบบปกติ' | 'ส่งด่วน';
 
 // เลือกพื้นที่และความเร็วในการจัดส่ง แล้วกด "สร้างคำสั่งซื้อ" (OP-8 pressCheckout) คืนเลข order ที่หน้าเว็บแสดง
 export async function createOrderUI(page: Page, zone: Zone, speed: Speed): Promise<string> {
   await page.getByRole('radio', { name: zone }).check();
-  await page.getByRole('radio', { name: new RegExp(`^${speed} `) }).check();
+  await page.getByRole('radio', { name: speed, exact: true }).check();
   await page.getByRole('button', { name: 'สร้างคำสั่งซื้อ' }).click();
 
   const heading = page.getByRole('heading', { name: /^คำสั่งซื้อ #/ });

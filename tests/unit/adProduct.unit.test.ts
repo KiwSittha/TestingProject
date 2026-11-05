@@ -55,12 +55,12 @@ describe("updateProduct ตาม FR-9.1.1", () => {
     });
   });
 
-  it("แจ้งชื่อทุกฟิลด์ที่เกินช่วงที่กำหนด", async () => {
+  it("แจ้งชื่อทุกฟิลด์ price", async () => {
     vi.mocked(getProduct).mockResolvedValue({ id: "product-1" } as any);
 
     const req = {
       params: { id: "product-1" },
-      body: { price: 50001, stock: 10000 },
+      body: { price: 50001, stock: 5000 },
     } as unknown as Request;
 
     const res = {
@@ -70,9 +70,48 @@ describe("updateProduct ตาม FR-9.1.1", () => {
 
     await expect(updateProduct(req, res)).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
-      details: { fields: ["price", "stock"] },
+      details: { fields: ["price"] },
     });
   });
+
+  it("แจ้งชื่อทุกฟิลด์ stock", async () => {
+    vi.mocked(getProduct).mockResolvedValue({ id: "product-1" } as any);
+
+    const req = {
+      params: { id: "product-1" },
+      body: { price: 20000, stock: 10000 },
+    } as unknown as Request;
+
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    } as unknown as Response;
+
+    await expect(updateProduct(req, res)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { fields: ["stock"] },
+    });
+  });
+
+  it("แจ้งชื่อทุกฟิลด์ price และ stock", async () => {
+    vi.mocked(getProduct).mockResolvedValue({ id: "product-1" } as any);
+
+    const req = {
+      params: { id: "product-1" },
+      body: { price: 20000, stock: 10000 },
+    } as unknown as Request;
+
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    } as unknown as Response;
+
+    await expect(updateProduct(req, res)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { fields: [ "price","stock"] },
+    });
+  });
+
 
   it("อัปเดตราคาและ stock ได้เมื่อข้อมูลถูกต้อง", async () => {
   const existingProduct = {

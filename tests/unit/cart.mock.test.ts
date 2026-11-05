@@ -100,6 +100,54 @@ describe("resolveCartCoupon (mock: carts.update)", () => {
     expect(from).not.toHaveBeenCalled();
     expect(result).toEqual({ coupon: null, removed: false });
   });
+
+  it("MK-07: coupon code not found in DB -> clear coupon on carts", async () => {
+    // Arrange
+    const cart = makeCart({ id: "C001", applied_coupon_code: "GONE99" });
+    const couponQuery = stubQuery<CouponRow>({ data: null, error: null });
+    const updateQuery = stubQuery(UPDATE_OK);
+    from.mockReturnValueOnce(couponQuery).mockReturnValueOnce(updateQuery);
+
+    // Act
+    const result = await resolveCartCoupon(cart, 1000);
+
+    // Assert
+    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenNthCalledWith(1, "coupons");
+    expect(couponQuery.eq).toHaveBeenCalledWith("code", "GONE99");
+    expect(from).toHaveBeenNthCalledWith(2, "carts");
+    expect(updateQuery.update).toHaveBeenCalledTimes(1);
+    expect(updateQuery.update).toHaveBeenCalledWith({
+      applied_coupon_code: null,
+      updated_at: expect.any(String)
+    });
+    expect(updateQuery.eq).toHaveBeenCalledWith("id", "C001");
+    expect(result).toEqual({ coupon: null, removed: true });
+  });
+
+  it("MK-08: coupon inactive (subtotal >= min_spend) -> clear coupon on carts", async () => {
+    // Arrange
+    const coupon = makeCoupon({ min_spend: 500, status: COUPON_STATUS.INACTIVE });
+    const cart = makeCart({ id: "C001", applied_coupon_code: coupon.code });
+    const couponQuery = stubQuery({ data: coupon, error: null });
+    const updateQuery = stubQuery(UPDATE_OK);
+    from.mockReturnValueOnce(couponQuery).mockReturnValueOnce(updateQuery);
+
+    // Act
+    const result = await resolveCartCoupon(cart, 1000);
+
+    // Assert
+    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenNthCalledWith(1, "coupons");
+    expect(from).toHaveBeenNthCalledWith(2, "carts");
+    expect(updateQuery.update).toHaveBeenCalledTimes(1);
+    expect(updateQuery.update).toHaveBeenCalledWith({
+      applied_coupon_code: null,
+      updated_at: expect.any(String)
+    });
+    expect(updateQuery.eq).toHaveBeenCalledWith("id", "C001");
+    expect(result).toEqual({ coupon: null, removed: true });
+  });
 });
 
 // ---------- getOrCreateCart ----------

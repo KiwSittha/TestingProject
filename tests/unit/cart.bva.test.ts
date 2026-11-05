@@ -121,13 +121,39 @@ describe("assertLineAllowed - quantity vs available_stock", () => {
   );
 });
 
+// ---------- assertLineAllowed: stock ของสินค้า (ขอบด้านเดียว available_stock >= 1) ----------
+
+describe("assertLineAllowed - available_stock >= 1", () => {
+  it.each([
+    { id: "BVA-11", label: "1-1", stock: 0, expected: "PRODUCT_UNAVAILABLE" as const, outcome: "PRODUCT_UNAVAILABLE" },
+    { id: "BVA-12", label: "1", stock: 1, expected: null, outcome: "pass" },
+    { id: "BVA-13", label: "1+1", stock: 2, expected: null, outcome: "pass" }
+  ])(
+    "$id: available_stock = $stock ($label), quantity = 1 -> $outcome",
+    ({ stock, expected }) => {
+      // Arrange
+      const product = makeProduct({ available_stock: stock });
+
+      // Act
+      const error = captureError(() => assertLineAllowed(product, QTY_MIN));
+
+      // Assert
+      if (expected === null) {
+        expect(error).toBeUndefined();
+      } else {
+        expectApiError(error, expected);
+      }
+    }
+  );
+});
+
 // ---------- assertWeightAllowed: น้ำหนักรวม (ขอบด้านเดียว <= MAX_CART_WEIGHT_GRAM) ----------
 
 describe("assertWeightAllowed - total weight <= MAX_CART_WEIGHT_GRAM", () => {
   it.each([
-    { id: "BVA-11", label: "max-1", totalWeight: MAX_CART_WEIGHT_GRAM - 1, expected: null, outcome: "pass" },
-    { id: "BVA-12", label: "max", totalWeight: MAX_CART_WEIGHT_GRAM, expected: null, outcome: "pass" },
-    { id: "BVA-13", label: "max+1", totalWeight: MAX_CART_WEIGHT_GRAM + 1, expected: "WEIGHT_LIMIT_EXCEEDED" as const, outcome: "WEIGHT_LIMIT_EXCEEDED" }
+    { id: "BVA-14", label: "max-1", totalWeight: MAX_CART_WEIGHT_GRAM - 1, expected: null, outcome: "pass" },
+    { id: "BVA-15", label: "max", totalWeight: MAX_CART_WEIGHT_GRAM, expected: null, outcome: "pass" },
+    { id: "BVA-16", label: "max+1", totalWeight: MAX_CART_WEIGHT_GRAM + 1, expected: "WEIGHT_LIMIT_EXCEEDED" as const, outcome: "WEIGHT_LIMIT_EXCEEDED" }
   ])(
     "$id: total weight = $totalWeight g ($label) -> $outcome",
     ({ totalWeight, expected }) => {
@@ -155,9 +181,9 @@ const MIN_SPEND = 500;
 
 describe("isCouponApplicable - subtotal >= min_spend", () => {
   it.each([
-    { id: "BVA-14", label: "min_spend-1", subtotal: MIN_SPEND - 1, expected: false },
-    { id: "BVA-15", label: "min_spend", subtotal: MIN_SPEND, expected: true },
-    { id: "BVA-16", label: "min_spend+1", subtotal: MIN_SPEND + 1, expected: true }
+    { id: "BVA-17", label: "min_spend-1", subtotal: MIN_SPEND - 1, expected: false },
+    { id: "BVA-18", label: "min_spend", subtotal: MIN_SPEND, expected: true },
+    { id: "BVA-19", label: "min_spend+1", subtotal: MIN_SPEND + 1, expected: true }
   ])(
     "$id: min_spend = 500, subtotal = $subtotal ($label) -> $expected",
     ({ subtotal, expected }) => {
@@ -177,10 +203,10 @@ describe("isCouponApplicable - subtotal >= min_spend", () => {
 
 describe("discountOf - 10% coupon", () => {
   it.each([
-    { id: "BVA-17", label: "1000-1", subtotal: 999, expected: 99 },
-    { id: "BVA-18", label: "1000", subtotal: 1000, expected: 100 },
-    { id: "BVA-19", label: "1000+1", subtotal: 1001, expected: 100 },
-    { id: "BVA-20", label: "zero", subtotal: 0, expected: 0 }
+    { id: "BVA-20", label: "1000-1", subtotal: 999, expected: 99 },
+    { id: "BVA-21", label: "1000", subtotal: 1000, expected: 100 },
+    { id: "BVA-22", label: "1000+1", subtotal: 1001, expected: 100 },
+    { id: "BVA-23", label: "zero", subtotal: 0, expected: 0 }
   ])(
     "$id: subtotal = $subtotal ($label) -> discount $expected",
     ({ subtotal, expected }) => {
@@ -199,7 +225,7 @@ describe("discountOf - 10% coupon", () => {
 // ---------- withQuantity: quantity (ขอบด้านเดียว ต้อง >= QTY_MIN ถึงจะเก็บไว้) ----------
 
 describe("withQuantity - remove line when quantity drops below QTY_MIN", () => {
-  it("BVA-21: quantity = 0 -> line removed", () => {
+  it("BVA-24: quantity = 0 -> line removed", () => {
     // Arrange
     const target = makeProduct({ id: "P001" });
     const other = makeProduct({ id: "P002" });
@@ -215,7 +241,7 @@ describe("withQuantity - remove line when quantity drops below QTY_MIN", () => {
     expect(result.map((l) => l.product.id)).toEqual(["P002"]);
   });
 
-  it("BVA-22: quantity = 1 -> line kept with quantity 1", () => {
+  it("BVA-25: quantity = 1 -> line kept with quantity 1", () => {
     // Arrange
     const target = makeProduct({ id: "P001" });
     const other = makeProduct({ id: "P002" });

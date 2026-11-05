@@ -37,6 +37,18 @@ export function authenticateToken(
     return next();
   }
 
+  // 🟢 ทางลัด Prime Customer (ใช้ทดสอบ Decision Table: ส่วนลด/ค่าส่งของสมาชิก Prime)
+  if (process.env.NODE_ENV !== "production" && token === "valid_prime_token") {
+    req.user = {
+      userId: "cus_prime",
+      username: "cus_prime",
+      role: "Customer"
+    } as AuthUser;
+ 
+    return next();
+  }
+
+
   // 🟢 ทางลัดฝั่ง Admin (OP-15 ถึง OP-18) ใช้ได้เฉพาะ Dev/Test เท่านั้น
   if (process.env.NODE_ENV !== "production" && token === "valid_admin_token") {
     req.user = {

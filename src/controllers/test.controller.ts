@@ -4,7 +4,7 @@ import { COUPON_STATUS, PRODUCT_STATUS, USER_STAGE } from "../config/business";
 import { dbCheck } from "../utils/errors";
 
 // ผู้ใช้ที่ชุดเทสใช้ (เพิ่ม id ได้ถ้ามี user ทดสอบคนอื่น) — reset แตะเฉพาะ user เหล่านี้
-const TEST_USER_IDS = ["cus_normal"];
+const TEST_USER_IDS = ["cus_normal", "cus_prime"];
 
 // ค่าตั้งต้นของข้อมูลทดสอบ ตรงกับ PRODUCTS ใน e2e/helpers.ts
 const BASELINE_PRODUCTS = [

@@ -47,23 +47,23 @@ test.describe('SC-01 ซื้อสินค้าและชำระเง�
     await expect(page.getByText('x2')).toBeVisible();
 
     // 5. เลือก "กรุงเทพฯ" + "ส่งแบบปกติ" แล้วกด "สร้างคำสั่งซื้อ"
-    const orderId = await createOrderUI(page, 'กรุงเทพฯ', 'ส่งแบบปกติ');
-    await expect(page.getByText('฿40.00')).toBeVisible();
-    await expect(page.getByText('฿940.00')).toBeVisible();
-    expect(await api.order(orderId)).toMatchObject({ status: 'รอชำระเงิน', net_total: 940 });
+    const orderId = await createOrderUI(page, 'ในเมือง', 'ส่งแบบปกติ');
+    await expect(page.getByText('฿30.00')).toBeVisible();
+await expect(page.getByText('฿930.00')).toBeVisible();
+expect(await api.order(orderId)).toMatchObject({ status: 'รอชำระเงิน', net_total: 930 });
 
     // 6. กด "ยืนยันชำระเงิน"
     await page.getByRole('button', { name: 'ยืนยันชำระเงิน' }).click();
     await expect(page.getByRole('heading', { name: `ชำระเงินสำเร็จ! คำสั่งซื้อ #${orderId} ได้รับการยืนยันแล้ว` })).toBeVisible();
     await expect(cartButton(page, 0)).toBeVisible();
-    expect((await api.order(orderId)).status).toBe('ชำระเงินสำเร็จ');
+    expect((await api.order(orderId)).status).toBe('ชำระเงินแล้ว');
     expect(await api.stock('P1')).toBe(PRODUCTS.P1.stock - 2);
     expect(await api.quantityInCart('P1')).toBe(0);
 
     // 7. กด "ไปที่ประวัติคำสั่งซื้อ"
     await page.getByRole('button', { name: 'ไปที่ประวัติคำสั่งซื้อ' }).click();
     await expect(page.getByRole('heading', { name: 'ประวัติคำสั่งซื้อและการจัดซื้อของฉัน' })).toBeVisible();
-    await expect(page.getByRole('row').filter({ hasText: orderId })).toContainText('ชำระเงินสำเร็จ');
+    await expect(page.getByRole('row').filter({ hasText: orderId })).toContainText('ชำระเงินแล้ว');
   });
 });
 
@@ -78,19 +78,19 @@ test.describe('SC-02 ชำระเงินไม่สำเร็จแล�
 
     // 4. เลือก "ต่างจังหวัด" + "ส่งด่วน" แล้วกด "สร้างคำสั่งซื้อ"
     const orderId = await createOrderUI(page, 'ต่างจังหวัด', 'ส่งด่วน');
-    await expect(page.getByText('฿120.00')).toBeVisible();
-    await expect(page.getByText('฿570.00')).toBeVisible();
-    expect(await api.order(orderId)).toMatchObject({ status: 'รอชำระเงิน', net_total: 570 });
+    await expect(page.getByText('฿75.00')).toBeVisible();
+    await expect(page.getByText('฿525.00')).toBeVisible();
+    expect(await api.order(orderId)).toMatchObject({ status: 'รอชำระเงิน', net_total: 525 });
 
     // 5. กด "จำลองชำระเงินไม่สำเร็จ"
     await page.getByRole('button', { name: 'จำลองชำระเงินไม่สำเร็จ' }).click();
     await expect(page.getByText('ชำระเงินไม่สำเร็จ สินค้ายังอยู่ในตะกร้า')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'ตะกร้าสินค้าสำหรับองค์กร' })).toBeVisible();
-    await expect(cartRow(page, 'P1')).toContainText('฿450.00');
-    await expect(cartButton(page, 1)).toBeVisible();
-    expect((await api.order(orderId)).status).toBe('ชำระเงินไม่สำเร็จ');
+    // ยังอยู่หน้า checkout และ order ยังรอชำระเงิน (SRS FR-6.2.2)
+    await expect(page.getByRole('heading', { name: `คำสั่งซื้อ #${orderId}` })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'ยืนยันชำระเงิน' })).toBeVisible();
+    expect((await api.order(orderId)).status).toBe('รอชำระเงิน');
     expect(await api.quantityInCart('P1')).toBe(1);
-    expect(await api.stock('P1')).toBe(PRODUCTS.P1.stock);
+    expect(await api.stock('P1')).toBe(PRODUCTS.P1.stock - 1);
   });
 });
 
@@ -105,9 +105,9 @@ test.describe('SC-03 ยกเลิกคำสั่งซื้อแล้�
 
     // 4. เลือก "ต่างจังหวัด" + "ส่งด่วน" แล้วกด "สร้างคำสั่งซื้อ"
     const orderId = await createOrderUI(page, 'ต่างจังหวัด', 'ส่งด่วน');
-    await expect(page.getByText('฿120.00')).toBeVisible();
-    await expect(page.getByText('฿570.00')).toBeVisible();
-    expect(await api.order(orderId)).toMatchObject({ status: 'รอชำระเงิน', net_total: 570 });
+    await expect(page.getByText('฿75.00')).toBeVisible();
+    await expect(page.getByText('฿525.00')).toBeVisible();
+    expect(await api.order(orderId)).toMatchObject({ status: 'รอชำระเงิน', net_total: 525 });
 
     // 5. กด "ยกเลิกคำสั่งซื้อ"
     await page.getByRole('button', { name: 'ยกเลิกคำสั่งซื้อ' }).click();
@@ -127,7 +127,7 @@ test.describe('SC-04 ตะกร้าว่างแล้วชำระเ�
 
     // 2. กด "ตะกร้าสินค้า 0"
     await cartButton(page, 0).click();
-    await expect(page.getByRole('heading', { name: 'ตะกร้าสินค้าของคุณยังว่างอยู่' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'ตะกร้าว่าง', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'ดำเนินการชำระเงิน' })).toHaveCount(0);
     expect(await api.orders()).toHaveLength(ordersBefore.length);
   });

@@ -45,7 +45,7 @@ describe("updateProduct ตาม FR-9.1.1", () => {
 
     const req = {
       params: { id: "missing-product" },
-      body: { price: 0, stock: 5000 },
+      body: { price: 5000, stock: 0 },
     } as unknown as Request;
 
     const res = {} as Response;

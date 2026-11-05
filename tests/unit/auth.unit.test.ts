@@ -76,7 +76,7 @@ describe("login ตาม FR-0.1", () => {
     query.maybeSingle.mockResolvedValue({ data: null, error: null });
 
     const req = {
-      body: { username: "unknown", password: "some-password" },
+      body: { username: "unknown", password: "correct-password" },
     } as unknown as Request;
 
     await expect(login(req, {} as Response)).rejects.toMatchObject({

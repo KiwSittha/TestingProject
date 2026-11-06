@@ -27,7 +27,7 @@ describe("SRS-CART-002 Automated API Testing", () => {
       const res = await fetch(`${BASE}/login`, {
         method: "POST",
         headers: JSON_HDR,
-        body: JSON.stringify({ username: "cus_normal", password: "12345678" }),
+        body: JSON.stringify({ username: "cus_normal", password: "254717" }),
       });
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -39,7 +39,7 @@ describe("SRS-CART-002 Automated API Testing", () => {
       const res = await fetch(`${BASE}/login`, {
         method: "POST",
         headers: JSON_HDR,
-        body: JSON.stringify({ username: "admin01", password: "12345678" }),
+        body: JSON.stringify({ username: "admin01", password: "254717" }),
       });
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -61,7 +61,7 @@ describe("SRS-CART-002 Automated API Testing", () => {
       const res = await fetch(`${BASE}/login`, {
         method: "POST",
         headers: JSON_HDR,
-        body: JSON.stringify({ username: "no_such_user", password: "12345678" }),
+        body: JSON.stringify({ username: "no_such_user", password: "254717" }),
       });
       expect(res.status).toBe(401);
       const body = await res.json();

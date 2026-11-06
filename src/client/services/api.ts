@@ -1,4 +1,4 @@
-import type { User, Product, Cart, Order, PaymentResult } from '../types';
+import type { User, Product, Cart, Coupon, Order, PaymentResult, Session } from '../types';
 
 export interface ApiError extends Error {
   code?: string;
@@ -52,6 +52,11 @@ export function loginApi(username: string, password: string): Promise<{ accessTo
   return request('/login', { method: 'POST', body: { username, password } }, 'Login failed', 'AUTH_ERROR');
 }
 
+// ผู้ใช้ปัจจุบันและ stage (ใช้เลือกหน้าตาม stage, DC-2.13)
+export function fetchSessionApi(token: string): Promise<Session> {
+  return request('/me', { token }, 'Failed to load session', 'SESSION_ERROR');
+}
+
 export function fetchProductsApi(token: string): Promise<{ products: Product[] }> {
   return request('/list', { token }, 'Failed to fetch products', 'PRODUCTS_ERROR');
 }
@@ -77,7 +82,7 @@ export function applyCouponApi(token: string, code: string): Promise<{ message: 
 }
 
 // ยังไม่มีเลข order ตอน checkout จึงใช้ "new" ใน path (ดู API.md)
-export function checkoutApi(token: string, zone: string, speed: string): Promise<{ message: string; order: Order }> {
+export function checkoutApi(token: string, zone: string, speed: string): Promise<{ message: string; order: Order; notice?: string }> {
   return request('/orders/new/payment', { method: 'POST', token, body: { zone, speed } }, 'Failed to create order', 'ORDER_ERROR');
 }
 
@@ -95,4 +100,31 @@ export function fetchOrdersApi(token: string): Promise<{ orders: Order[] }> {
 
 export function fetchOrderApi(token: string, orderId: string): Promise<{ order: Order }> {
   return request(`/orders/${encodeURIComponent(orderId)}`, { token }, 'Failed to fetch order', 'ORDER_ERROR');
+}
+
+// OP-12 continueShopping
+export function continueShoppingApi(token: string): Promise<{ cart: Cart }> {
+  return request('/cart/continue', { method: 'POST', token }, 'Failed to continue shopping', 'CART_ERROR');
+}
+
+// ---------- Admin ----------
+
+// OP-15 updateProduct
+export function updateProductApi(token: string, productId: string, changes: { price?: number; stock?: number }): Promise<{ message: string; product: Product }> {
+  return request(`/admin/products/${encodeURIComponent(productId)}/update`, { method: 'PATCH', token, body: changes }, 'Failed to update product', 'ADMIN_ERROR');
+}
+
+// OP-16 setProductStatus
+export function setProductStatusApi(token: string, productId: string, status: string): Promise<{ message: string; product: Product }> {
+  return request(`/admin/products/${encodeURIComponent(productId)}/set`, { method: 'PATCH', token, body: { status } }, 'Failed to update product status', 'ADMIN_ERROR');
+}
+
+// OP-18 listCoupons
+export function fetchCouponsApi(token: string): Promise<{ coupons: Coupon[] }> {
+  return request('/admin/coupons', { token }, 'Failed to fetch coupons', 'ADMIN_ERROR');
+}
+
+// OP-17 setCouponStatus (API.md: 1 = เปิดใช้, 0 = ปิดใช้)
+export function setCouponStatusApi(token: string, code: string, active: boolean): Promise<{ message: string; coupon: Coupon }> {
+  return request(`/admin/coupons/${encodeURIComponent(code)}/set`, { method: 'PATCH', token, body: { status: active ? 1 : 0 } }, 'Failed to update coupon status', 'ADMIN_ERROR');
 }

@@ -217,17 +217,15 @@ export async function resolveCartCoupon(
   return { coupon: null, removed: true };
 }
 
-export async function buildCartSummary(
-  cart: CartRow,
-  options: { allowCouponBelowMinSpend?: boolean } = {}
-): Promise<CartSummary> {
+// สรุปตะกร้าสำหรับแสดงผล (viewCart และผลของคำสั่งที่แก้ตะกร้า)
+// ไม่ถอดคูปอง: คูปองที่ผูกไว้คงอยู่ (FR-2.9, FR-3.2.2) และถูกประเมินเฉพาะตอน pressCheckout
+// (FR-5.2.2, FR-10.1.3) ส่วนลดที่แสดงตรงนี้จึงเป็นแค่ค่าประมาณ
+export async function buildCartSummary(cart: CartRow): Promise<CartSummary> {
   const lines = await getCartLines(cart.id);
   const subtotal = subtotalOf(lines);
-  const { coupon, removed } = await resolveCartCoupon(
-    cart,
-    subtotal,
-    options.allowCouponBelowMinSpend
-  );
+  const coupon = cart.applied_coupon_code
+    ? await findCoupon(cart.applied_coupon_code)
+    : null;
   const profile = dbCheck(
     await supabase
       .from("users")
@@ -236,10 +234,10 @@ export async function buildCartSummary(
       .maybeSingle<{ member_tier: string | null }>(),
     "Load customer membership tier"
   );
-  const hasCouponDiscount = Boolean(coupon && subtotal >= coupon.min_spend);
-  const discount = hasCouponDiscount
+  const couponApplies = Boolean(coupon && isCouponApplicable(coupon, subtotal));
+  const discount = couponApplies
     ? discountOf(subtotal, coupon)
-    : !coupon && profile?.member_tier === "prime"
+    : profile?.member_tier === "prime"
       ? Math.floor((subtotal * 5) / 100)
       : 0;
 
@@ -264,10 +262,6 @@ export async function buildCartSummary(
     discount,
     total: subtotal - discount
   };
-
-  if (removed) {
-    summary.notice = COUPON_NOT_APPLICABLE_MESSAGE;
-  }
 
   return summary;
 }

@@ -152,15 +152,26 @@ export async function applyCoupon(req: Request, res: Response) {
 
   res.status(200).json({
     message: "Coupon applied",
-    cart: await buildCartSummary(cart, { allowCouponBelowMinSpend: true })
+    cart: await buildCartSummary(cart)
   });
 }
 
-// OP-7 ViewCart / OP-12 continueShopping: GET /cart
+// OP-7 ViewCart: GET /cart
+// ดูอย่างเดียว ไม่เปลี่ยน stage (FR-8.5.2 viewCart ใช้ได้ทุก stage, FR-1.2.3 stage คงอยู่จนมีคำสั่งเปลี่ยน)
 export async function viewCart(req: Request, res: Response) {
   const user = currentUser(req);
+  const cart = await getOrCreateCart(user.userId);
 
-  // กลับมาซื้อต่อหลังชำระเงินสำเร็จ -> รีเซ็ตสถานะผู้ใช้กลับเป็นตะกร้า
+  res.status(200).json({
+    cart: await buildCartSummary(cart)
+  });
+}
+
+// OP-12 continueShopping: POST /cart/continue (route ตรวจว่าอยู่ stage สำเร็จ)
+// FR-6.4: กลับไป stage ตะกร้า ซึ่งตะกร้าว่างแล้วตั้งแต่ paySuccess (FR-6.1.2)
+export async function continueShopping(req: Request, res: Response) {
+  const user = currentUser(req);
+
   dbCheck(
     await supabase
       .from("users")

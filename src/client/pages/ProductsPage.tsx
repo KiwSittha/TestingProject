@@ -5,12 +5,18 @@ import { PRODUCT_STATUS } from '../../config/business';
 import { DEFAULT_PRODUCT_IMAGE } from '../constants';
 import type { Product } from '../types';
 
+// FR-1.3.1: Customer เห็นเฉพาะสินค้าพร้อมขาย (สถานะเปิดขาย และสต็อกพร้อมขายอย่างน้อย 1)
+const isAvailable = (product: Product) =>
+  product.status === PRODUCT_STATUS.ON_SALE && (product.available_stock ?? 0) >= 1;
+
 export const ProductsPage: React.FC = () => {
   const { token, applyCart, addToast, showApiError } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | number | null>(null);
+  // จำนวนที่จะเพิ่มของแต่ละสินค้า (เก็บเป็นข้อความตามที่ผู้ใช้พิมพ์ ให้ api-server ตรวจค่า)
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -22,7 +28,7 @@ export const ProductsPage: React.FC = () => {
 
     try {
       const data = await fetchProductsApi(token);
-      setProducts(data.products || []);
+      setProducts((data.products || []).filter(isAvailable));
     } catch (err: any) {
       console.error('Fetch products error:', err);
       setErrorMsg(err.message || 'ไม่สามารถดึงข้อมูลสินค้าจาก API GET /list ได้');
@@ -49,13 +55,15 @@ export const ProductsPage: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
+  const quantityOf = (product: Product) => quantities[String(product.id)] ?? '1';
+
+  // OP-3 addItem
   const handleAddToCart = async (product: Product) => {
     if (!token) return;
     setAddingId(product.id);
 
     try {
-      // Call POST /cart/items API
-      const data = await addToCartApi(token, String(product.id), 1);
+      const data = await addToCartApi(token, String(product.id), Number(quantityOf(product)));
       applyCart(data.cart);
 
       addToast(`เพิ่ม "${product.name || 'สินค้า'}" ลงตะกร้าเรียบร้อยแล้ว!`, 'success');
@@ -67,19 +75,20 @@ export const ProductsPage: React.FC = () => {
   };
 
   return (
-    <main className="w-full min-h-[calc(100vh-8rem)] bg-background py-space-lg">
+    <main data-testid="page-products" className="w-full min-h-[calc(100vh-8rem)] bg-background py-space-lg">
       <div className="max-w-[1280px] w-full mx-auto px-margin flex flex-col gap-space-lg">
 
         {/* Controls: Search & Category Filter */}
         <div className="bg-surface-container-lowest p-space-md rounded-lg shadow-sm border border-surface-variant flex flex-col gap-space-md">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-space-sm items-center">
-            
+
             <div className="md:col-span-6 relative">
               <div className="absolute inset-y-0 left-0 pl-space-sm flex items-center pointer-events-none text-on-surface-variant">
                 <span className="material-symbols-outlined text-[20px]">search</span>
               </div>
               <input
                 type="text"
+                aria-label="ค้นหาสินค้า"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="ค้นหาชื่อสินค้า, หมวดหมู่ หรือรายละเอียด..."
@@ -89,6 +98,7 @@ export const ProductsPage: React.FC = () => {
 
             <div className="md:col-span-4">
               <select
+                aria-label="หมวดหมู่"
                 value={selectedCategory}
                 onChange={e => setSelectedCategory(e.target.value)}
                 className="w-full px-space-sm py-2.5 bg-surface-container-lowest text-on-surface font-body-sm text-body-sm rounded-lg border border-outline-variant/40 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm cursor-pointer"
@@ -145,19 +155,20 @@ export const ProductsPage: React.FC = () => {
               </div>
             ) : (
               filteredProducts.map(product => {
+                const id = String(product.id);
                 const name = product.name || product.title || `สินค้า #${product.id}`;
-                const price = Number(product.price || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+                const priceValue = Number(product.price || 0);
+                const price = priceValue.toLocaleString('th-TH', { minimumFractionDigits: 2 });
                 const imgUrl = product.image_url || product.image || DEFAULT_PRODUCT_IMAGE;
                 const category = product.category || 'ทั่วไป';
                 const description = product.description || 'สินค้าคุณภาพสำหรับองค์กร พร้อมการรับประกันมาตรฐาน';
-                const isAdding = String(addingId) === String(product.id);
-                const isOffSale = product.status !== PRODUCT_STATUS.ON_SALE;
+                const isAdding = String(addingId) === id;
                 const stock = product.available_stock ?? 0;
-                const isUnavailable = isOffSale || stock <= 0;
 
                 return (
                   <div
-                    key={product.id}
+                    key={id}
+                    data-testid={`product-row-${id}`}
                     className="bg-surface-container-lowest rounded-lg border border-surface-variant shadow-sm hover:shadow-md hover:border-primary/50 transition-all flex flex-col justify-between overflow-hidden"
                   >
                     <div>
@@ -176,7 +187,7 @@ export const ProductsPage: React.FC = () => {
                       </div>
 
                       <div className="p-space-md flex flex-col gap-2">
-                        <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold line-clamp-1" title={name}>
+                        <h3 data-testid="product-name" className="font-headline-sm text-headline-sm text-on-surface font-semibold line-clamp-1" title={name}>
                           {name}
                         </h3>
                         <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 min-h-[2.75rem]">
@@ -188,30 +199,44 @@ export const ProductsPage: React.FC = () => {
                     <div className="p-space-md pt-0 flex flex-col gap-3">
                       <div className="flex items-baseline justify-between pt-2 border-t border-surface-variant">
                         <span className="font-code-sm text-code-sm text-on-surface-variant">ราคา</span>
-                        <span className="font-code-md text-headline-sm text-primary font-bold">฿{price}</span>
+                        <span data-testid="product-price" data-value={priceValue} className="font-code-md text-headline-sm text-primary font-bold">฿{price}</span>
                       </div>
-                      <span className="font-code-sm text-code-sm text-on-surface-variant">คงเหลือ {stock} ชิ้น</span>
+                      <div className="flex justify-between font-code-sm text-code-sm text-on-surface-variant">
+                        <span data-testid="product-stock" data-value={stock}>คงเหลือ {stock} ชิ้น</span>
+                        {product.weight_gram !== undefined && <span>น้ำหนัก {product.weight_gram.toLocaleString('th-TH')} กรัม/ชิ้น</span>}
+                      </div>
 
-                      <button
-                        type="button"
-                        disabled={isAdding || isUnavailable}
-                        onClick={() => handleAddToCart(product)}
-                        className="w-full bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md py-2.5 rounded-lg transition-colors font-semibold shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
-                      >
-                        {isAdding ? (
-                          <>
-                            <span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>
-                            <span>กำลังบันทึก...</span>
-                          </>
-                        ) : isUnavailable ? (
-                          <span>{isOffSale ? 'ปิดการขาย' : 'สินค้าหมด'}</span>
-                        ) : (
-                          <>
-                            <span className="material-symbols-outlined text-lg">add_shopping_cart</span>
-                            <span>เพิ่มลงตะกร้า</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <label className="sr-only" htmlFor={`qty-${id}`}>จำนวน {name}</label>
+                        <input
+                          id={`qty-${id}`}
+                          type="number"
+                          inputMode="numeric"
+                          data-testid="product-add-qty"
+                          value={quantityOf(product)}
+                          onChange={e => setQuantities(prev => ({ ...prev, [id]: e.target.value }))}
+                          className="w-20 px-2 py-2.5 bg-surface-container-low border border-outline-variant/40 rounded-lg text-body-md text-center"
+                        />
+                        <button
+                          type="button"
+                          data-testid="product-add-button"
+                          disabled={isAdding}
+                          onClick={() => handleAddToCart(product)}
+                          className="flex-1 bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md py-2.5 rounded-lg transition-colors font-semibold shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
+                        >
+                          {isAdding ? (
+                            <>
+                              <span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>
+                              <span>กำลังบันทึก...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-lg">add_shopping_cart</span>
+                              <span>เพิ่มลงตะกร้า</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

@@ -802,7 +802,7 @@
         {
           "name": "OP-12 continueShopping",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "Authorization",
@@ -810,12 +810,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/cart",
+              "raw": "{{baseUrl}}/cart/continue",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "cart"
+                "cart",
+                "continue"
               ]
             }
           }

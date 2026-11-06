@@ -5,6 +5,16 @@ export interface User {
   memberTier?: string | null;
 }
 
+// stage ของ Customer ตามส่วนที่ 2 ของ spec
+export type Stage = 'ตะกร้า' | 'ชำระเงิน' | 'สำเร็จ';
+
+// GET /me
+export interface Session {
+  user: User;
+  stage: Stage | null; // null สำหรับ Admin
+  orderId: string | null;
+}
+
 export interface Product {
   id: string | number;
   name?: string;
@@ -14,8 +24,16 @@ export interface Product {
   image_url?: string;
   image?: string;
   category?: string;
+  weight_gram?: number;
   available_stock?: number;
   status?: string;
+}
+
+export interface Coupon {
+  code: string;
+  percent: number;
+  min_spend: number;
+  status: string;
 }
 
 export interface CartItem {
@@ -68,11 +86,30 @@ export interface Order {
 
 export type PaymentResult = 'success' | 'fail';
 
-export interface ToastMessage {
+// ข้อความบนหน้าจอ (DC-2.8): แสดงเป็น element app-message พร้อม data-kind และ data-code
+//   error  = การปฏิเสธที่มี error code
+//   notice = notice ที่มี code เช่น COUPON_NOT_APPLICABLE
+//   info   = ข้อความอื่น เช่นข้อความที่ FR กำหนด (data-code ว่าง)
+export type MessageKind = 'error' | 'notice' | 'info';
+export type MessageTone = 'success' | 'error' | 'warning' | 'info';
+
+export interface AppMessage {
   id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  message: string;
-  code?: string | undefined;
+  kind: MessageKind;
+  tone: MessageTone;
+  text: string;
+  code: string;
 }
 
-export type ViewType = 'login' | 'products' | 'cart' | 'checkout' | 'order-confirmation' | 'order-history';
+// หน้าที่ App แสดง เลือกจาก URL บทบาท และ stage
+export type PageKey =
+  | 'login'
+  | 'loading'
+  | 'products'
+  | 'cart'
+  | 'checkout'
+  | 'success'
+  | 'orders'
+  | 'order-detail'
+  | 'admin-products'
+  | 'admin-coupons';

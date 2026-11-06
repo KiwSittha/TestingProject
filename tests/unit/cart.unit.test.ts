@@ -15,6 +15,7 @@ import {
   removeCartItem,
   updateCartItem,
   viewCart,
+  continueShopping,
 } from "../../src/controllers/cart.controller";
 
 const { query } = vi.hoisted(() => {
@@ -601,9 +602,7 @@ describe("applyCoupon ตาม FR-3.1 ถึง FR-3.3", () => {
     await applyCoupon(makeCouponRequest("SAVE10"), res);
 
     expect(setCartCoupon).toHaveBeenCalledWith("cart-1", "SAVE10");
-    expect(buildCartSummary).toHaveBeenCalledWith(cart, {
-      allowCouponBelowMinSpend: true,
-    });
+    expect(buildCartSummary).toHaveBeenCalledWith(cart);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       message: "Coupon applied",
@@ -629,9 +628,7 @@ describe("applyCoupon ตาม FR-3.1 ถึง FR-3.3", () => {
     await applyCoupon(makeCouponRequest("SAVE10"), res);
 
     expect(setCartCoupon).toHaveBeenCalledWith("cart-1", "SAVE10");
-    expect(buildCartSummary).toHaveBeenCalledWith(cart, {
-      allowCouponBelowMinSpend: true,
-    });
+    expect(buildCartSummary).toHaveBeenCalledWith(cart);
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
@@ -665,12 +662,9 @@ function makeViewCartRequest(): Request {
 }
 
 // ---------- viewCart ----------
-describe("viewCart ตาม FR-2.9 และ FR-6.4", () => {
+describe("viewCart ตาม FR-2.9", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    query.eq
-      .mockReturnValueOnce(query)
-      .mockReturnValueOnce(Promise.resolve({ data: null, error: null }));
   });
 
   it("ส่ง cart summary กลับตามข้อมูลที่สร้างไว้", async () => {
@@ -699,6 +693,25 @@ describe("viewCart ตาม FR-2.9 และ FR-6.4", () => {
     expect(res.json).toHaveBeenCalledWith({ cart: summary });
   });
 
+  it("viewCart ไม่เปลี่ยน stage ของผู้ใช้ (FR-8.5.2, FR-1.2.3)", async () => {
+    setup(product, []);
+
+    await viewCart(makeViewCartRequest(), makeResponse());
+
+    expect(query.update).not.toHaveBeenCalled();
+  });
+});
+
+// ---------- continueShopping ----------
+// OP-12 แยกออกจาก viewCart เป็น POST /cart/continue (route ตรวจ stage สำเร็จ)
+describe("continueShopping ตาม FR-6.4", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    query.eq
+      .mockReturnValueOnce(query)
+      .mockReturnValueOnce(Promise.resolve({ data: null, error: null }));
+  });
+
   it("เมื่อกลับมาซื้อต่อ ให้เปลี่ยน stage สำเร็จเป็นตะกร้าและส่งตะกร้าว่าง", async () => {
     const emptySummary = {
       cartId: "cart-1",
@@ -712,7 +725,7 @@ describe("viewCart ตาม FR-2.9 และ FR-6.4", () => {
     vi.mocked(buildCartSummary).mockResolvedValue(emptySummary as any);
 
     const res = makeResponse();
-    await viewCart(makeViewCartRequest(), res);
+    await continueShopping(makeViewCartRequest(), res);
 
     expect(query.update).toHaveBeenCalledWith({
       current_stage: "ตะกร้า",

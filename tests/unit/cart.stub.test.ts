@@ -7,7 +7,6 @@ import { supabase } from "../../src/config/supabase";
 import { COUPON_STATUS, PRODUCT_STATUS } from "../../src/config/business";
 import {
   buildCartSummary,
-  COUPON_NOT_APPLICABLE_MESSAGE,
   getProduct,
   resolveCartCoupon
 } from "../../src/services/cart.service";
@@ -207,26 +206,28 @@ describe("buildCartSummary (stub: cart_items, coupons, carts.update)", () => {
     expect(summary.notice).toBeUndefined();
   });
 
-  it("ST-11: coupon no longer applicable -> notice = COUPON_NOT_APPLICABLE_MESSAGE", async () => {
+  it("ST-11: coupon below min_spend stays bound, no discount and no notice (FR-2.9, FR-5.2.2)", async () => {
     // Arrange
     // subtotal 100 x 2 = 200 < min_spend 500
+    // คูปองถูกประเมินและถอดเฉพาะตอน pressCheckout (ดู resolveCartCoupon) ไม่ใช่ตอนดูตะกร้า
     const product = makeProduct({ id: "P001", price: 100 });
     const coupon = makeCoupon({ min_spend: 500 });
     const cart = makeCart({ applied_coupon_code: coupon.code });
     from
       .mockReturnValueOnce(stubQuery({ data: [cartItemRow(product, 2)], error: null }))
       .mockReturnValueOnce(stubQuery({ data: coupon, error: null }))
-      .mockReturnValueOnce(stubQuery(UPDATE_OK))
       .mockReturnValueOnce(stubQuery({ data: { member_tier: "normal" }, error: null }));
 
     // Act
     const summary = await buildCartSummary(cart);
 
     // Assert
-    expect(summary.notice).toBe(COUPON_NOT_APPLICABLE_MESSAGE);
-    expect(summary.coupon).toBeNull();
+    expect(summary.notice).toBeUndefined();
+    expect(summary.coupon).toEqual({ code: "SAVE10", percent: 10, minSpend: 500 });
+    expect(cart.applied_coupon_code).toBe("SAVE10");
     expect(summary.discount).toBe(0);
     expect(summary.total).toBe(200);
+    expect(from).not.toHaveBeenCalledWith("carts");
   });
 
   it("ST-12: prime customer without an applicable coupon gets a 5% discount", async () => {

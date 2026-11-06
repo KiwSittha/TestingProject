@@ -2,6 +2,8 @@ import type { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { supabase } from "../config/supabase";
+import { USER_STAGE } from "../config/business";
+import { currentUser } from "../middleware/auth.middleware";
 import { ApiError, dbCheck } from "../utils/errors";
 import { getBody } from "../utils/validate";
 import type { UserRow } from "../types/db.types";
@@ -59,5 +61,35 @@ export async function login(req: Request, res: Response) {
       role: user.role,
       memberTier: user.member_tier
     }
+  });
+}
+
+// GET /me — ข้อมูลของผู้ที่ login อยู่ และ stage ปัจจุบันของ Customer
+// หน้าเว็บใช้เลือกหน้าที่ตรงกับ stage (DC-2.13) และคงหน้าเดิมเมื่อ login ใหม่ (FR-1.2.3)
+export async function me(req: Request, res: Response) {
+  const user = currentUser(req);
+  const profile = dbCheck(
+    await supabase
+      .from("users")
+      .select("member_tier, current_stage, current_order_id")
+      .eq("id", user.userId)
+      .maybeSingle<{
+        member_tier: string | null;
+        current_stage: string | null;
+        current_order_id: string | null;
+      }>(),
+    "Load current user"
+  );
+  const isCustomer = user.role === "Customer";
+
+  res.status(200).json({
+    user: {
+      id: user.userId,
+      username: user.username,
+      role: user.role,
+      memberTier: profile?.member_tier ?? null
+    },
+    stage: isCustomer ? profile?.current_stage ?? USER_STAGE.CART : null,
+    orderId: isCustomer ? profile?.current_order_id ?? null : null
   });
 }

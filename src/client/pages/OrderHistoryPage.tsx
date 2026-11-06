@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { fetchOrderApi, fetchOrdersApi } from '../services/api';
+import { fetchOrdersApi } from '../services/api';
 import { ORDER_STATUS } from '../../config/business';
 import { ORDER_STATUS_BADGES, SPEED_LABELS, ZONE_LABELS, formatOrderDate } from '../constants';
 import type { Order } from '../types';
@@ -9,7 +9,7 @@ const shippingLabel = (order: Order) =>
   `${ZONE_LABELS[order.zone] || order.zone} · ${SPEED_LABELS[order.speed] || order.speed}`;
 
 export const OrderHistoryPage: React.FC = () => {
-  const { token, addToast, showApiError, setCurrentOrder, setCurrentView } = useApp();
+  const { token, addToast, navigate } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -34,16 +34,9 @@ export const OrderHistoryPage: React.FC = () => {
     loadOrders();
   }, [token]);
 
-  const handleResumePayment = async (orderId: string) => {
-    if (!token) return;
-
-    try {
-      const data = await fetchOrderApi(token, orderId);
-      setCurrentOrder(data.order);
-      setCurrentView('checkout');
-    } catch (err: any) {
-      showApiError(err, 'ไม่สามารถโหลดคำสั่งซื้อได้');
-    }
+  // ออเดอร์ที่รอชำระคือออเดอร์ของ stage ชำระเงิน จึงเปิดหน้าของ stage นั้น
+  const handleResumePayment = () => {
+    navigate('/checkout');
   };
 
   const handleExportCSV = () => {
@@ -76,7 +69,7 @@ export const OrderHistoryPage: React.FC = () => {
   };
 
   return (
-    <main className="w-full min-h-[calc(100vh-8rem)] bg-background py-space-lg">
+    <main data-testid="page-orders" className="w-full min-h-[calc(100vh-8rem)] bg-background py-space-lg">
       <div className="max-w-[1280px] w-full mx-auto px-margin flex flex-col gap-space-lg">
 
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-md bg-surface-container-lowest p-space-lg rounded-lg shadow-sm border border-surface-variant">
@@ -152,7 +145,7 @@ export const OrderHistoryPage: React.FC = () => {
                     const formattedTotal = Number(ord.net_total || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
 
                     return (
-                      <tr key={ord.id} className="hover:bg-surface-container-low/50 transition-colors">
+                      <tr key={ord.id} data-testid={`order-row-${ord.id}`} className="hover:bg-surface-container-low/50 transition-colors">
                         <td className="p-4 font-code-md font-bold text-primary">
                           {ord.id}
                         </td>
@@ -163,19 +156,28 @@ export const OrderHistoryPage: React.FC = () => {
                           {shippingLabel(ord)}
                         </td>
                         <td className="p-4 text-right font-code-md font-bold text-on-surface">
-                          ฿{formattedTotal}
+                          <span data-testid="order-total" data-value={ord.net_total}>฿{formattedTotal}</span>
                         </td>
                         <td className="p-4 text-center">
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-code-sm text-code-sm font-semibold border ${ORDER_STATUS_BADGES[ord.status] || 'bg-success/10 text-success border-success/30'}`}>
+                          <span data-testid="order-status" data-status={ord.status} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-code-sm text-code-sm font-semibold border ${ORDER_STATUS_BADGES[ord.status] || 'bg-success/10 text-success border-success/30'}`}>
                             <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
                             {ord.status}
                           </span>
                         </td>
-                        <td className="p-4 text-right">
+                        <td className="p-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            data-testid="order-view"
+                            onClick={() => navigate(`/orders/${encodeURIComponent(ord.id)}`)}
+                            className="text-primary hover:underline font-label-md font-semibold inline-flex items-center gap-1 mr-3"
+                          >
+                            <span className="material-symbols-outlined text-sm">visibility</span>
+                            <span>ดูรายละเอียด</span>
+                          </button>
                           {ord.status === ORDER_STATUS.PENDING_PAYMENT ? (
                             <button
                               type="button"
-                              onClick={() => handleResumePayment(ord.id)}
+                              onClick={handleResumePayment}
                               className="text-primary hover:underline font-label-md font-semibold inline-flex items-center gap-1"
                             >
                               <span className="material-symbols-outlined text-sm">payments</span>

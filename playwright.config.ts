@@ -15,7 +15,8 @@ delete process.env.GIO_MODULE_DIR;
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  testDir: './e2e',
+  /* E2E ตาม SRS-CART-002 (docs/e2e-srs-design.md) ชุดเดิม e2e/checkout.spec.ts ใช้กับหน้าเว็บก่อนทำ DC-2 จึงไม่รันแล้ว */
+  testDir: './e2e/srs',
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -36,8 +37,8 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
 
-  /* E2E covers critical user journeys only; API and unit tests live outside Playwright */
-  /* Every test logs in as cus_normal (password from TEST_PASSWORD) and writes to the same database */
+  /* API และ unit test อยู่นอก Playwright (vitest) */
+  /* ทุกเทส reset ข้อมูลด้วย POST /test/reset และใช้บัญชี cus_normal, cus_prime, admin01 (รหัสผ่านจาก TEST_PASSWORD) */
   projects: [
     {
       name: 'chromium',

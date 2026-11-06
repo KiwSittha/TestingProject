@@ -6,6 +6,7 @@ import {
 import {
   addCartItem,
   applyCoupon,
+  continueShopping,
   removeCartItem,
   updateCartItem,
   viewCart
@@ -20,6 +21,7 @@ router.post("/cart/items", requireStage("ตะกร้า"), addCartItem);    
 router.patch("/cart/items/:id", requireStage("ตะกร้า"), updateCartItem);  // OP-4
 router.delete("/cart/items/:id", requireStage("ตะกร้า"), removeCartItem); // OP-5
 router.put("/cart/items", requireStage("ตะกร้า"), applyCoupon);           // OP-6
-router.get("/cart", viewCart);                    // OP-7, OP-12
+router.get("/cart", viewCart);                    // OP-7
+router.post("/cart/continue", requireStage("สำเร็จ"), continueShopping); // OP-12
 
 export default router;

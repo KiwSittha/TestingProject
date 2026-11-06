@@ -35,7 +35,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <main className="w-full min-h-[calc(100vh-4rem)] flex flex-col justify-center items-center p-margin bg-background">
+    <main data-testid="page-login" className="w-full min-h-[calc(100vh-4rem)] flex flex-col justify-center items-center p-margin bg-background">
       <div className="w-full max-w-md bg-surface-container-lowest rounded-lg shadow-sm p-8 flex flex-col gap-6 border border-surface-variant">
 
         <div className="flex flex-col items-center text-center gap-3">
@@ -74,6 +74,7 @@ export const LoginPage: React.FC = () => {
             <div className="relative flex items-center">
               <input
                 id="username-input"
+                data-testid="login-username"
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
@@ -93,6 +94,7 @@ export const LoginPage: React.FC = () => {
             <div className="relative flex items-center">
               <input
                 id="password-input"
+                data-testid="login-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -125,6 +127,7 @@ export const LoginPage: React.FC = () => {
 
           <button
             type="submit"
+            data-testid="login-submit"
             disabled={loading}
             className="w-full mt-2 bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md py-3 rounded-lg transition-colors font-semibold shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
           >
